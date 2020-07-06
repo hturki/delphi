@@ -1,0 +1,51 @@
+syntax = "proto3";
+
+import "google/protobuf/any.proto";
+import "google/protobuf/empty.proto";
+import "google/protobuf/wrappers.proto";
+import "proto/learning_module.proto";
+
+service InternalService {
+   rpc GetExamples (GetExamplesRequest) returns (stream ExampleMetadata);
+   rpc GetExample (GetExampleRequest) returns (google.protobuf.BytesValue);
+   rpc Train (google.protobuf.Int32Value) returns (google.protobuf.Empty);
+   rpc StageModel (StageModelRequest) returns (google.protobuf.Empty);
+   rpc ValidateTestResults (google.protobuf.Int32Value) returns (google.protobuf.Empty);
+   rpc SubmitTestResults (stream TestResult) returns (google.protobuf.Empty);
+   rpc PromoteModel (google.protobuf.Int32Value) returns (google.protobuf.Empty);
+   rpc DiscardModel (google.protobuf.Int32Value) returns (google.protobuf.Empty);
+   rpc MessageInternal (InternalMessage) returns (google.protobuf.Any);
+}
+
+message GetExamplesRequest {
+  ExampleSet exampleSet = 1;
+  int32 nodeIndex = 2;
+}
+
+message ExampleMetadata {
+  string label = 1;
+  string key = 2;
+}
+
+message GetExampleRequest {
+  ExampleSet exampleSet = 1;
+  string label = 2;
+  string key = 3;
+}
+
+message StageModelRequest {
+  int32 version = 1;
+  int32 trainerIndex = 2;
+  bytes content = 3;
+}
+
+message TestResult {
+  int32 version = 1;
+  string label = 2;
+  double score = 3;
+}
+
+message InternalMessage {
+  int32 trainerIndex = 1;
+  google.protobuf.Any message = 2;
+}

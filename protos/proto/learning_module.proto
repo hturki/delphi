@@ -1,0 +1,69 @@
+syntax = "proto3";
+
+import "google/protobuf/empty.proto";
+
+service LearningModuleService {
+   rpc Infer (stream InferRequest) returns (stream InferResult);
+   rpc AddLabeledExamples (stream LabeledExample) returns (google.protobuf.Empty);
+   rpc GetModelStatistics (google.protobuf.Empty) returns (ModelStatistics);
+   rpc ImportModel (ImportModelRequest) returns (google.protobuf.Empty);
+   rpc ExportModel (google.protobuf.Empty) returns (ModelArchive);
+}
+
+message InferRequest {
+  string objectId = 1;
+  bytes content = 2;
+}
+
+message InferResult {
+  string objectId = 1;
+  string label = 2;
+  double score = 3;
+  int32 modelVersion = 4;
+}
+
+message LabeledExample {
+  string label = 1;
+  bytes content = 2;
+  ExampleSetWrapper exampleSet = 3;
+}
+
+enum ExampleSet {
+  TRAIN = 0;
+  TEST = 1;
+}
+
+message ExampleSetWrapper {
+  ExampleSet value = 1;
+}
+
+message ModelStatistics {
+  int64 testExamples = 1;
+  double auc = 2;
+  ModelMetrics validationMetrics = 3;
+  ModelMetrics idealMetrics = 4;
+  double bestThreshold = 5;
+  repeated double precisions = 6;
+  repeated double recalls = 7;
+  repeated double thresholds = 8;
+  int32 version = 9;
+}
+
+message ModelMetrics {
+  int64 truePositives = 1;
+  int64 falsePositives = 2;
+  int64 falseNegatives = 3;
+  double precision = 4;
+  double recall = 5;
+  double f1Score = 6;
+}
+
+message ImportModelRequest {
+  int32 version = 1;
+  bytes content = 2;
+}
+
+message ModelArchive {
+  int32 version = 1;
+  bytes content = 2;
+}
