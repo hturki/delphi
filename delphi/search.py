@@ -6,43 +6,50 @@ import threading
 import time
 import zipfile
 from collections import defaultdict
+from pathlib import Path
 from typing import Dict, List, Optional, Iterator, Tuple
 
 import numpy as np
 import tensorboard
 from google.protobuf.any_pb2 import Any
-from google.protobuf.wrappers_pb2 import Int32Value
 from logzero import logger
+from more_itertools import peekable
 from sklearn.metrics import classification_report, average_precision_score, precision_recall_curve, confusion_matrix
 from torch.utils.tensorboard import SummaryWriter
 
 from delphi.condition.model_condition import ModelCondition
 from delphi.context.data_manager_context import DataManagerContext
 from delphi.context.model_trainer_context import ModelTrainerContext
-from delphi.data_manager import ExampleSet, DataManager
+from delphi.data_manager import DataManager
 from delphi.learning_module_stub import LearningModuleStub
 from delphi.model import Model
 from delphi.model_trainer import ModelTrainer, TrainingStyle
-from delphi.proto.internal_pb2 import ExampleMetadata, TestResult, StageModelRequest
-from delphi.proto.learning_module_pb2 import LabeledExample, ModelStatistics, ModelMetrics, ModelArchive, \
-    InferRequest, InferResult
+from delphi.proto.internal_pb2 import ExampleMetadata, TestResult, StageModelRequest, TrainModelRequest, \
+    DiscardModelRequest, PromoteModelRequest, SubmitTestRequest, ValidateTestResultsRequest
+from delphi.proto.learning_module_pb2 import ModelStatistics, ModelMetrics, ModelArchive, InferResult, InferObject
+from delphi.proto.search_pb2 import SearchId, LabeledExample, ExampleSet
 from delphi.retrain.retrain_policy import RetrainPolicy
+from delphi.retrieval.retriever import Retriever
+from delphi.selection.selector import Selector
 from delphi.utils import log_exceptions, to_iter
 
 
-class Coordinator(DataManagerContext, ModelTrainerContext):
+class Search(DataManagerContext, ModelTrainerContext):
     trainers: List[ModelCondition]
 
-    def __init__(self, node_index: int, nodes: List[LearningModuleStub], retrain_policy: RetrainPolicy,
-                 only_use_better_models: bool, root_dir: str):
+    def __init__(self, id: SearchId, node_index: int, nodes: List[LearningModuleStub], retrain_policy: RetrainPolicy,
+                 only_use_better_models: bool, root_dir: Path, port: int, selector: Selector):
+        self._id = id
         self._node_index = node_index
         self._nodes = nodes
 
         self._retrain_policy = retrain_policy
-        self._data_dir = os.path.join(root_dir, 'data')
-        self._tb_dir = os.path.join(root_dir, 'tb')
+        self._data_dir = root_dir / 'data'
+        self._tb_dir = root_dir / 'tb'
 
         self._only_use_better_models = only_use_better_models
+        self._port = port
+        self.selector = selector
 
         self._model: Optional[Model] = None
         self._tb_writer: Optional[SummaryWriter] = None
@@ -50,7 +57,7 @@ class Coordinator(DataManagerContext, ModelTrainerContext):
 
         self._model_stats = ModelStatistics(version=-1)
         self._model_lock = threading.Lock()
-        self._wait_for_trained_model_condition = mp.Condition()
+        self._initial_model_event = threading.Event()
         self._model_event = threading.Event()
         self._last_trained_version = -1
 
@@ -62,20 +69,19 @@ class Coordinator(DataManagerContext, ModelTrainerContext):
 
         # Indicates that the search will seed the strategy with an initial set of examples. The strategy should
         # therefore hold off on returning inference results until its underlying model is trained
-        self.has_initial_examples = False
+        self._has_initial_examples = False
 
         if self._node_index == 0:
             threading.Thread(target=self._train_thread, name='train-model').start()
 
-    def infer(self, requests: Iterator[InferRequest]) -> Iterator[InferResult]:
+    def infer(self, requests: Iterator[InferObject]) -> Iterator[InferResult]:
         with self._model_lock:
             model = self._model
 
         if model is None:
-            if self.has_initial_examples:
+            if self._has_initial_examples:
                 # Wait for the model to train before inferencing
-                with self._wait_for_trained_model_condition:
-                    self._wait_for_trained_model_condition.wait()
+                self._initial_model_event.wait()
             else:
                 # Pass all examples until user has labeled enough examples to train a model
                 for request in requests:
@@ -84,7 +90,7 @@ class Coordinator(DataManagerContext, ModelTrainerContext):
         with self._model_lock:
             model = self._model
 
-        yield from delphi.model.infer(requests)
+        yield from model.infer(requests)
 
     def add_labeled_examples(self, examples: Iterator[LabeledExample]) -> None:
         self._data_manager.add_labeled_examples(examples)
@@ -92,13 +98,13 @@ class Coordinator(DataManagerContext, ModelTrainerContext):
     def get_examples(self, example_set: ExampleSet, node_index: int) -> Iterator[ExampleMetadata]:
         return self._data_manager.get_example_stream(example_set, node_index)
 
-    def get_example(self, example_set: ExampleSet, label: str, example: str) -> str:
-        return self._data_manager.get_example_location(example_set, label, example)
+    def get_example(self, example_set: ExampleSet, label: str, example: str) -> Path:
+        return self._data_manager.get_example_path(example_set, label, example)
 
     def get_model_statistics(self) -> ModelStatistics:
         # We assume that the master is the source of truth
         if self._node_index != 0:
-            return self._nodes[0].api.GetModelStatistics()
+            return self._nodes[0].api.GetModelStatistics(self._id)
 
         with self._model_lock:
             return self._model_stats
@@ -122,13 +128,13 @@ class Coordinator(DataManagerContext, ModelTrainerContext):
         with zipfile.ZipFile(memory_file, 'w', compression=zipfile.ZIP_DEFLATED) as zf:
             zf.writestr('model', model.get_bytes())
             if self._tb_writer is not None:
-                for file in os.listdir(self._tb_dir):
-                    zf.write(os.path.join(self._tb_dir, file), arcname=os.path.join('tensorboard', file))
+                for file in self._tb_dir.iterdir():
+                    zf.write(file, arcname=os.path.join('tensorboard', file.name))
 
         memory_file.seek(0)
         return ModelArchive(version=model_version, content=memory_file.getvalue())
 
-    def train(self, trainer_index: int) -> None:
+    def train_model(self, trainer_index: int) -> None:
         assert self._node_index != 0 \
                and self.trainers[trainer_index].trainer.training_style is TrainingStyle.DISTRIBUTED
         threading.Thread(target=self._train_model_slave_thread, args=(trainer_index,), name='train-model').start()
@@ -171,8 +177,7 @@ class Coordinator(DataManagerContext, ModelTrainerContext):
             self._last_trained_version = model_version
 
         if should_notify:
-            with self._wait_for_trained_model_condition:
-                self._wait_for_trained_model_condition.notify_all()
+            self._initial_model_event.set()
 
         logger.info('Promoted model version {}'.format(model_version))
 
@@ -209,15 +214,23 @@ class Coordinator(DataManagerContext, ModelTrainerContext):
         return self._nodes
 
     @property
+    def port(self) -> int:
+        return self._port
+
+    @property
     def tb_writer(self) -> SummaryWriter:
         if self._tb_writer is None:
             self._start_tensorboard()
-            self._tb_writer = SummaryWriter(self._tb_dir)
+            self._tb_writer = SummaryWriter(str(self._tb_dir))
 
         return self._tb_writer
 
     @property
-    def data_dir(self) -> str:
+    def search_id(self) -> SearchId:
+        return self._id
+
+    @property
+    def data_dir(self) -> Path:
         return self._data_dir
 
     def get_active_trainers(self) -> List[ModelTrainer]:
@@ -236,6 +249,26 @@ class Coordinator(DataManagerContext, ModelTrainerContext):
             self._retrain_policy.reset()
             self._model_event.set()
 
+    def start(self, retriever: Retriever, examples: Iterator[LabeledExample]):
+        threading.Thread(target=self._retriever_thread, args=(retriever, examples), name='get-objects').start()
+
+    @log_exceptions
+    def _retriever_thread(self, retriever: Retriever, examples: Iterator[LabeledExample]):
+        try:
+            retriever.start()
+            peekable_examples = peekable(examples)
+            if peekable_examples.peek(None) is not None:
+                assert self._node_index == 0
+                self._has_initial_examples = True
+                self._data_manager.add_labeled_examples(peekable_examples)
+                self._initial_model_event.set()
+
+            for result in self.infer(retriever.get_objects()):
+                self.selector.add_result(result)
+        finally:
+            retriever.stop()
+
+    @log_exceptions
     def _train_thread(self):
         while True:
             try:
@@ -253,32 +286,33 @@ class Coordinator(DataManagerContext, ModelTrainerContext):
 
         with self._data_manager.get_examples(ExampleSet.TRAIN) as train_dir:
             example_counts = {}
-            for label in os.listdir(train_dir):
-                example_counts[label] = len(os.listdir(os.path.join(train_dir, label)))
+            for label in train_dir.iterdir():
+                example_counts[label] = len(list(label.iterdir()))
 
-            train_index = None
+            trainer_index = None
 
             with self._model_lock:
                 model_stats = self._model_stats
 
             for i in range(len(self.trainers)):
                 if self.trainers[i].is_satisfied(example_counts, model_stats):
-                    train_index = i
+                    trainer_index = i
                     break
 
-            if train_index is None:
+            if trainer_index is None:
                 logger.info('Current conditions do not match any trainer - aborting')
                 return
 
-            if self.trainers[train_index].trainer.training_style is TrainingStyle.DISTRIBUTED and len(self._nodes) > 0:
+            if self.trainers[trainer_index].trainer.training_style is TrainingStyle.DISTRIBUTED \
+                    and len(self._nodes) > 0:
                 for node in self._nodes[1:]:
-                    node.internal.Train(Int32Value(value=train_index))
+                    node.internal.TrainModel(TrainModelRequest(searchId=self._id, trainerIndex=trainer_index))
 
-            model = self.trainers[train_index].trainer.train_model(train_dir)
+            model = self.trainers[trainer_index].trainer.train_model(train_dir)
 
         eval_start = time.time()
         logger.info('Trained model in {:.3f} seconds'.format(eval_start - train_start))
-        self._score_and_set_model(model, self.trainers[train_index].trainer.should_sync_model)
+        self._score_and_set_model(model, self.trainers[trainer_index].trainer.should_sync_model)
         logger.info('Evaluated model in {:.3f} seconds'.format(time.time() - eval_start))
 
     def _score_and_set_model(self, model: Model, should_stage: bool) -> None:
@@ -286,11 +320,13 @@ class Coordinator(DataManagerContext, ModelTrainerContext):
             if len(self._nodes) > 0:
                 for node in self._nodes[1:]:
                     if should_stage:
-                        node.internal.StageModel(StageModelRequest(version=model.version, content=model.get_bytes()))
-                        logger.info('Staged model on node {}'.format(node.host))
+                        node.internal.StageModel(
+                            StageModelRequest(searchId=self._id, version=model.version, content=model.get_bytes()))
+                        logger.info('Staged model on node {}'.format(node.url))
 
-                    node.internal.ValidateTestResults(Int32Value(value=model.version))
-                    logger.info('Started validation for model version {} on node {}'.format(model.version, node.host))
+                    node.internal.ValidateTestResults(
+                        ValidateTestResultsRequest(searchId=self._id, version=model.version))
+                    logger.info('Started validation for model version {} on node {}'.format(model.version, node.url))
 
             results = []
 
@@ -337,17 +373,16 @@ class Coordinator(DataManagerContext, ModelTrainerContext):
                         .format(model_stats.auc, better_old_score))
             if len(self._nodes) > 0:
                 for node in self._nodes[1:]:
-                    node.internal.DiscardModel(Int32Value(value=model.version))
-                    logger.info('Discarded model version {} on node {}'.format(model.version, node.host))
+                    node.internal.DiscardModel(DiscardModelRequest(searchId=self._id, version=model.version))
+                    logger.info('Discarded model version {} on node {}'.format(model.version, node.url))
         else:
             if should_notify:
-                with self._wait_for_trained_model_condition:
-                    self._wait_for_trained_model_condition.notify_all()
+                self._initial_model_event.set()
 
             if len(self._nodes) > 0:
                 for node in self._nodes[1:]:
-                    node.internal.PromoteModel(Int32Value(value=model.version))
-                    logger.info('Promoted model on node {} to version {}'.format(node.host, model.version))
+                    node.internal.PromoteModel(PromoteModelRequest(searchId=self._id, version=model.version))
+                    logger.info('Promoted model on node {} to version {}'.format(node.url, model.version))
 
     @log_exceptions
     def _train_model_slave_thread(self, trainer_index: int):
@@ -371,9 +406,10 @@ class Coordinator(DataManagerContext, ModelTrainerContext):
         result_queue = queue.Queue()
 
         future = self.nodes[0].internal.SubmitTestResults.future(to_iter(result_queue))
+        result_queue.put(SubmitTestRequest(searchId=self._id))
 
         def store_result(target: int, pred: float):
-            result_queue.put(TestResult(version=model_version, label=str(target), score=pred))
+            result_queue.put(SubmitTestRequest(result=TestResult(version=model_version, label=str(target), score=pred)))
 
         eval_start = time.time()
         with self._data_manager.get_examples(ExampleSet.TEST) as test_dir:
@@ -398,7 +434,7 @@ class Coordinator(DataManagerContext, ModelTrainerContext):
 
     def _start_tensorboard(self):
         tb = tensorboard.program.TensorBoard()
-        tb_port = self.nodes[0].port + 1
+        tb_port = self._port + 1
         for i in range(10):
             tb.configure(argv=[None, '--logdir', self._tb_dir, '--host', '0.0.0.0', '--port', str(tb_port)])
             logger.info('Trying to launch Tensorboard on port {}'.format(tb_port))

@@ -1,5 +1,6 @@
 import multiprocessing as mp
 from abc import abstractmethod
+from pathlib import Path
 from typing import List, Callable, Iterator, Tuple
 
 import torch
@@ -8,11 +9,11 @@ from torch.utils.data import DataLoader
 from torchvision import datasets
 
 from delphi.model import Model
-from delphi.proto.learning_module_pb2 import InferResult, InferRequest
+from delphi.proto.learning_module_pb2 import InferResult, InferObject
 from delphi.pytorch.pytorch_trainer_base import get_test_transforms
 
 
-def preprocess(request: InferRequest) -> Tuple[str, torch.Tensor]:
+def preprocess(request: InferObject) -> Tuple[str, torch.Tensor]:
     return request.objectId, get_test_transforms()(request.content)
 
 
@@ -34,7 +35,7 @@ class PytorchModelBase(Model):
     def version(self) -> int:
         return self._version
 
-    def infer(self, requests: Iterator[InferRequest]) -> Iterator[InferResult]:
+    def infer(self, requests: Iterator[InferObject]) -> Iterator[InferResult]:
         batch = []
         items = self._pool.imap_unordered(preprocess, requests)
 
@@ -47,8 +48,8 @@ class PytorchModelBase(Model):
         if len(batch) > 0:
             yield from self._process_batch(batch)
 
-    def infer_dir(self, directory: str, callback_fn: Callable[[int, float], None]) -> None:
-        dataset = datasets.ImageFolder(directory, transform=self._test_transforms)
+    def infer_dir(self, directory: Path, callback_fn: Callable[[int, float], None]) -> None:
+        dataset = datasets.ImageFolder(str(directory), transform=self._test_transforms)
         data_loader = DataLoader(dataset, batch_size=self._batch_size, shuffle=False, num_workers=mp.cpu_count())
 
         with torch.no_grad():

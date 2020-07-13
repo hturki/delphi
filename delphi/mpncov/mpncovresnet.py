@@ -1,5 +1,3 @@
-import os
-
 import torch
 import torch.nn as nn
 from torchvision.models.resnet import Bottleneck
@@ -12,8 +10,7 @@ class MPNCOVResNet(nn.Module):
     def __init__(self, block, layers, num_classes=1000):
         self.inplanes = 64
         super(MPNCOVResNet, self).__init__()
-        self.conv1 = nn.Conv2d(3, 64, kernel_size=7, stride=2, padding=3,
-                               bias=False)
+        self.conv1 = nn.Conv2d(3, 64, kernel_size=7, stride=2, padding=3, bias=False)
         self.bn1 = nn.BatchNorm2d(64)
         self.relu = nn.ReLU(inplace=True)
         self.maxpool = nn.MaxPool2d(kernel_size=3, stride=2, padding=1)
@@ -21,8 +18,7 @@ class MPNCOVResNet(nn.Module):
         self.layer2 = self._make_layer(block, 128, layers[1], stride=2)
         self.layer3 = self._make_layer(block, 256, layers[2], stride=2)
         self.layer4 = self._make_layer(block, 512, layers[3], stride=1)
-        self.layer_reduce = nn.Conv2d(512 * block.expansion, 256, kernel_size=1, stride=1, padding=0,
-                                      bias=False)
+        self.layer_reduce = nn.Conv2d(512 * block.expansion, 256, kernel_size=1, stride=1, padding=0, bias=False)
         self.layer_reduce_bn = nn.BatchNorm2d(256)
         self.layer_reduce_relu = nn.ReLU(inplace=True)
         self.fc = nn.Linear(int(256 * (256 + 1) / 2), num_classes)
@@ -76,11 +72,7 @@ class MPNCOVResNet(nn.Module):
 
 
 def mpncovresnet50(model_dir=None, **kwargs):
-    """Constructs a ResNet-50 model.
-    Args:
-        :param model_dir: Path to pretrained model
-    """
     model = MPNCOVResNet(Bottleneck, [3, 4, 6, 3], **kwargs)
     if model_dir is not None:
-        model.load_state_dict(torch.load(os.path.join(model_dir, 'mpncovresnet50-15991845.pth')))
+        model.load_state_dict(torch.load(model_dir / 'mpncovresnet50-15991845.pth'))
     return model

@@ -1,9 +1,9 @@
-import glob
 import multiprocessing as mp
-import os
+import multiprocessing as mp
 import pickle
 import queue
 import threading
+from pathlib import Path
 from typing import Callable, Iterator, List, Tuple, Any, Union
 
 import torch
@@ -13,7 +13,7 @@ from sklearn.ensemble import VotingClassifier
 from sklearn.svm import LinearSVC, SVC
 
 from delphi.model import Model
-from delphi.proto.learning_module_pb2 import InferRequest, InferResult
+from delphi.proto.learning_module_pb2 import InferResult, InferObject
 from delphi.svm.feature_provider import FeatureProvider, BATCH_SIZE, get_worker_feature_provider, \
     set_worker_feature_provider
 from delphi.utils import log_exceptions
@@ -21,8 +21,8 @@ from delphi.utils import log_exceptions
 
 # return object_id, whether to preprocess, vector or (image, key)
 @log_exceptions
-def load_from_path(image_path: str) -> Tuple[str, bool, Union[List[float], Any]]:
-    split = image_path.split('/')
+def load_from_path(image_path: Path) -> Tuple[str, bool, Union[List[float], Any]]:
+    split = image_path.parts
     label = split[-2]
     name = split[-1]
     object_id = '{}/{}'.format(label, name)
@@ -32,7 +32,7 @@ def load_from_path(image_path: str) -> Tuple[str, bool, Union[List[float], Any]]
     if cached_vector is not None:
         return object_id, False, cached_vector
     else:
-        with open(image_path, 'rb') as f:
+        with image_path.open('rb') as f:
             content = f.read()
 
         return object_id, True, (get_worker_feature_provider().preprocess(content).numpy(), key)
@@ -40,7 +40,7 @@ def load_from_path(image_path: str) -> Tuple[str, bool, Union[List[float], Any]]
 
 # return object_id, whether to preprocess, vector or (image, key)
 @log_exceptions
-def load_from_content(request: InferRequest) -> Tuple[str, bool, Union[List[float], Any]]:
+def load_from_content(request: InferObject) -> Tuple[str, bool, Union[List[float], Any]]:
     key = get_worker_feature_provider().get_result_key_content(request.content)
     cached_vector = get_worker_feature_provider().get_cached_vector(key)
     if cached_vector is not None:
@@ -64,18 +64,18 @@ class SVMModel(Model):
     def version(self) -> int:
         return self._version
 
-    def infer(self, requests: Iterator[InferRequest]) -> Iterator[InferResult]:
+    def infer(self, requests: Iterator[InferObject]) -> Iterator[InferResult]:
         with mp.Pool(min(16, mp.cpu_count()), initializer=set_worker_feature_provider,
                      initargs=(self._feature_provider.feature_extractor,
                                self._feature_provider.cache)) as pool:
             images = pool.imap_unordered(load_from_content, requests, chunksize=64)
             yield from self._infer_inner(images)
 
-    def infer_dir(self, directory: str, callback_fn: Callable[[int, float], None]) -> None:
+    def infer_dir(self, directory: Path, callback_fn: Callable[[int, float], None]) -> None:
         with mp.Pool(min(16, mp.cpu_count()), initializer=set_worker_feature_provider,
                      initargs=(self._feature_provider.feature_extractor,
                                self._feature_provider.cache)) as pool:
-            images = pool.imap_unordered(load_from_path, glob.iglob(os.path.join(directory, '*/*')), chunksize=64)
+            images = pool.imap_unordered(load_from_path, directory.glob('*/*'), chunksize=64)
 
             results = self._infer_inner(images)
 

@@ -1,6 +1,7 @@
 import copy
 import io
 import time
+from pathlib import Path
 from typing import Optional
 
 import torch
@@ -25,7 +26,7 @@ TRAIN_BATCH_SIZE = 24
 
 class MPNCovTrainer(PytorchTrainerBase):
 
-    def __init__(self, context: ModelTrainerContext, distributed: bool, freeze: Optional[int], model_dir: str):
+    def __init__(self, context: ModelTrainerContext, distributed: bool, freeze: Optional[int], model_dir: Path):
         super().__init__(context, MPNCOV_TEST_TRANSFORMS, distributed)
 
         self._curr_epoch = 0
@@ -83,7 +84,7 @@ class MPNCovTrainer(PytorchTrainerBase):
         return MPNCovModel(model_pred, self.get_new_version(), self._curr_epoch, self._optimizer.state_dict(),
                            self.pool)
 
-    def train_model(self, train_dir: str) -> Model:
+    def train_model(self, train_dir: Path) -> Model:
         start_time = time.time()
         start_epoch = self._curr_epoch
         epochs = 100
@@ -92,7 +93,7 @@ class MPNCovTrainer(PytorchTrainerBase):
         data_time = AverageMeter()
         losses = AverageMeter()
 
-        dataset = datasets.ImageFolder(train_dir, transform=self._train_transforms)
+        dataset = datasets.ImageFolder(str(train_dir), transform=self._train_transforms)
         weights = get_weights(dataset.targets)
         sampler = WeightedRandomSampler(weights, len(weights))
         if self.distributed:

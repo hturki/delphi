@@ -33,8 +33,8 @@ class PytorchTrainerBase(ModelTrainerBase):
         if self.distributed:
             os.environ['NCCL_DEBUG'] = 'INFO'
             os.environ['NCCL_SOCKET_IFNAME'] = 'eno2.1002'
-            os.environ['MASTER_ADDR'] = self.context.nodes[0]
-            os.environ['MASTER_PORT'] = str(self.context.nodes[0].port - 1)
+            os.environ['MASTER_ADDR'] = self.context.nodes[0].url.split(':')[0]
+            os.environ['MASTER_PORT'] = str(self.context.port - 1)
 
             # initialize the process group
             dist.init_process_group('nccl', rank=self.context.node_index, world_size=len(self.context.nodes))

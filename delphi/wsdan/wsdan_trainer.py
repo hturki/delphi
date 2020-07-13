@@ -1,6 +1,7 @@
 import copy
 import io
 import time
+from pathlib import Path
 from typing import Optional
 
 import torch
@@ -84,7 +85,7 @@ class WSDANTrainer(PytorchTrainerBase):
         return WSDANModel(model_pred, model_version, self._get_image_writer(), self._curr_epoch, checkpoint['optimizer'],
                           checkpoint['feature_center'], self.pool)
 
-    def train_model(self, train_dir: str) -> Model:
+    def train_model(self, train_dir: Path) -> Model:
         start_time = time.time()
         start_epoch = self._curr_epoch
         epochs = 10
@@ -94,7 +95,7 @@ class WSDANTrainer(PytorchTrainerBase):
         data_time = AverageMeter()
         losses = AverageMeter()
 
-        dataset = datasets.ImageFolder(train_dir, transform=self._train_transforms)
+        dataset = datasets.ImageFolder(str(train_dir), transform=self._train_transforms)
         weights = get_weights(dataset.targets)
         sampler = WeightedRandomSampler(weights, len(weights))
         if self.distributed:

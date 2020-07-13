@@ -1,3 +1,14 @@
+'''
+@file: MPNCOV.py
+@author: Jiangtao Xie
+@author: Peihua Li
+Please cite the paper below if you use the code:
+Peihua Li, Jiangtao Xie, Qilong Wang and Zilin Gao. Towards Faster Training of Global Covariance Pooling Networks by Iterative Matrix Square Root Normalization. IEEE Int. Conf. on Computer Vision and Pattern Recognition (CVPR), pp. 947-955, 2018.
+Peihua Li, Jiangtao Xie, Qilong Wang and Wangmeng Zuo. Is Second-order Information Helpful for Large-scale Visual Recognition? IEEE Int. Conf. on Computer Vision (ICCV),  pp. 2070-2078, 2017.
+Copyright (C) 2018 Peihua Li and Jiangtao Xie
+All rights reserved.
+'''
+
 import torch.nn as nn
 
 __all__ = ['Newmodel', 'get_model']

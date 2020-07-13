@@ -1,11 +1,10 @@
-import glob
 import io
 import multiprocessing as mp
-import os
 import pickle
 import queue
 import threading
 from collections import defaultdict
+from pathlib import Path
 from typing import Any, List, Dict, Tuple, Union
 
 import torch
@@ -34,8 +33,8 @@ F1_SCORER = make_scorer(f1_score, pos_label='1')
 
 # return label, whether to preprocess, vector or (image, key)
 @log_exceptions
-def load_from_path(image_path: str) -> Tuple[str, bool, Union[List[float], Any]]:
-    split = image_path.split('/')
+def load_from_path(image_path: Path) -> Tuple[str, bool, Union[List[float], Any]]:
+    split = image_path.parts
     label = split[-2]
     name = split[-1]
 
@@ -45,7 +44,7 @@ def load_from_path(image_path: str) -> Tuple[str, bool, Union[List[float], Any]]
     if cached_vector is not None:
         return label, False, cached_vector
     else:
-        with open(image_path, 'rb') as f:
+        with image_path.open('rb') as f:
             content = f.read()
 
         return label, True, (get_worker_feature_provider().preprocess(content).numpy(), key)
@@ -53,7 +52,7 @@ def load_from_path(image_path: str) -> Tuple[str, bool, Union[List[float], Any]]
 
 class SVMTrainerBase(ModelTrainerBase):
 
-    def __init__(self, context: ModelTrainerContext, model_dir: str, feature_extractor: str, cache: FeatureCache,
+    def __init__(self, context: ModelTrainerContext, model_dir: Path, feature_extractor: str, cache: FeatureCache,
                  probability: bool):
         super().__init__()
 
@@ -71,7 +70,7 @@ class SVMTrainerBase(ModelTrainerBase):
         bytes.seek(0)
         return SVMModel(pickle.load(bytes), model_version, self.feature_provider, self.probability)
 
-    def get_best_model(self, train_dir: str, param_grid: List[Dict[str, Any]]) -> \
+    def get_best_model(self, train_dir: Path, param_grid: List[Dict[str, Any]]) -> \
             Tuple[Union[LinearSVC, SVC, CalibratedClassifierCV], Any, float]:
         features = self._get_example_features(train_dir)
         flattened_examples = []
@@ -92,11 +91,11 @@ class SVMTrainerBase(ModelTrainerBase):
         return grid_search.best_estimator_.model, grid_search.best_params_, grid_search.best_score_
 
     # return label, vector or image, whether to preprocess
-    def _get_example_features(self, example_dir: str) -> Dict[str, List[List[float]]]:
+    def _get_example_features(self, example_dir: Path) -> Dict[str, List[List[float]]]:
         with mp.Pool(min(16, mp.cpu_count()), initializer=set_worker_feature_provider,
                      initargs=(self.feature_provider.feature_extractor,
                                self.feature_provider.cache)) as pool:
-            images = pool.imap_unordered(load_from_path, glob.iglob(os.path.join(example_dir, '*/*')), chunksize=64)
+            images = pool.imap_unordered(load_from_path, example_dir.glob('*/*'), chunksize=64)
             feature_queue = queue.Queue()
 
             @log_exceptions

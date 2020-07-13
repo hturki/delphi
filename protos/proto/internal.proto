@@ -3,23 +3,24 @@ syntax = "proto3";
 import "google/protobuf/any.proto";
 import "google/protobuf/empty.proto";
 import "google/protobuf/wrappers.proto";
-import "proto/learning_module.proto";
+import "proto/search.proto";
 
 service InternalService {
    rpc GetExamples (GetExamplesRequest) returns (stream ExampleMetadata);
    rpc GetExample (GetExampleRequest) returns (google.protobuf.BytesValue);
-   rpc Train (google.protobuf.Int32Value) returns (google.protobuf.Empty);
+   rpc TrainModel (TrainModelRequest) returns (google.protobuf.Empty);
    rpc StageModel (StageModelRequest) returns (google.protobuf.Empty);
-   rpc ValidateTestResults (google.protobuf.Int32Value) returns (google.protobuf.Empty);
-   rpc SubmitTestResults (stream TestResult) returns (google.protobuf.Empty);
-   rpc PromoteModel (google.protobuf.Int32Value) returns (google.protobuf.Empty);
-   rpc DiscardModel (google.protobuf.Int32Value) returns (google.protobuf.Empty);
+   rpc ValidateTestResults (ValidateTestResultsRequest) returns (google.protobuf.Empty);
+   rpc SubmitTestResults (stream SubmitTestRequest) returns (google.protobuf.Empty);
+   rpc PromoteModel (PromoteModelRequest) returns (google.protobuf.Empty);
+   rpc DiscardModel (DiscardModelRequest) returns (google.protobuf.Empty);
    rpc MessageInternal (InternalMessage) returns (google.protobuf.Any);
 }
 
 message GetExamplesRequest {
-  ExampleSet exampleSet = 1;
-  int32 nodeIndex = 2;
+  SearchId searchId = 1;
+  ExampleSet exampleSet = 2;
+  int32 nodeIndex = 3;
 }
 
 message ExampleMetadata {
@@ -28,15 +29,34 @@ message ExampleMetadata {
 }
 
 message GetExampleRequest {
-  ExampleSet exampleSet = 1;
-  string label = 2;
-  string key = 3;
+  SearchId searchId = 1;
+  ExampleSet exampleSet = 2;
+  string label = 3;
+  string key = 4;
+}
+
+message TrainModelRequest {
+  SearchId searchId = 1;
+  int32 trainerIndex = 2;
 }
 
 message StageModelRequest {
-  int32 version = 1;
-  int32 trainerIndex = 2;
-  bytes content = 3;
+  SearchId searchId = 1;
+  int32 version = 2;
+  int32 trainerIndex = 3;
+  bytes content = 4;
+}
+
+message ValidateTestResultsRequest {
+  SearchId searchId = 1;
+  int32 version = 2;
+}
+
+message SubmitTestRequest {
+  oneof value {
+    SearchId searchId = 1;
+    TestResult result = 2;
+  }
 }
 
 message TestResult {
@@ -45,7 +65,18 @@ message TestResult {
   double score = 3;
 }
 
+message PromoteModelRequest {
+  SearchId searchId = 1;
+  int32 version = 2;
+}
+
+message DiscardModelRequest {
+  SearchId searchId = 1;
+  int32 version = 2;
+}
+
 message InternalMessage {
-  int32 trainerIndex = 1;
-  google.protobuf.Any message = 2;
+  SearchId searchId = 1;
+  int32 trainerIndex = 2;
+  google.protobuf.Any message = 3;
 }

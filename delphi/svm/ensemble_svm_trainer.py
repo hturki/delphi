@@ -1,4 +1,5 @@
 import pickle
+from pathlib import Path
 from typing import Union
 
 import torch.multiprocessing as mp
@@ -11,6 +12,8 @@ from sklearn.svm import SVC
 from delphi.context.model_trainer_context import ModelTrainerContext
 from delphi.model import Model
 from delphi.model_trainer import TrainingStyle, DataRequirement
+from delphi.proto.internal_pb2 import InternalMessage
+from delphi.proto.search_pb2 import SearchId
 from delphi.proto.svm_trainer_pb2 import SetTrainResult, SVMTrainerMessage
 from delphi.svm.feature_cache import FeatureCache
 from delphi.svm.pretrained_voting_classifier import PretrainedVotingClassifier
@@ -20,9 +23,12 @@ from delphi.svm.svm_trainer_base import SVMTrainerBase, C_VALUES, GAMMA_VALUES
 
 class EnsembleSVMTrainer(SVMTrainerBase):
 
-    def __init__(self, context: ModelTrainerContext, model_dir: str, feature_extractor: str, cache: FeatureCache,
-                 linear_only: bool):
+    def __init__(self, context: ModelTrainerContext, model_dir: Path, feature_extractor: str, cache: FeatureCache,
+                 linear_only: bool, search_id: SearchId, trainer_index: int):
         super().__init__(context, model_dir, feature_extractor, cache, True)
+
+        self._search_id = search_id
+        self._trainer_index = trainer_index
 
         self._param_grid = [{'C': C_VALUES, 'kernel': ['linear']}]
 
@@ -41,7 +47,7 @@ class EnsembleSVMTrainer(SVMTrainerBase):
     def training_style(self) -> TrainingStyle:
         return TrainingStyle.DISTRIBUTED
 
-    def train_model(self, train_dir: str) -> Model:
+    def train_model(self, train_dir: Path) -> Model:
         version = self.get_new_version()
 
         best_model = self.get_best_model(train_dir, self._param_grid)[0]
@@ -61,7 +67,8 @@ class EnsembleSVMTrainer(SVMTrainerBase):
             message = Any()
             message.Pack(
                 SVMTrainerMessage(setTrainResult=SetTrainResult(version=version, model=pickle.dumps(best_model))))
-            self.context.nodes[0].internal.MessageInternal(message)
+            self.context.nodes[0].internal.MessageInternal(
+                InternalMessage(searchId=self._search_id, trainerIndex=self._trainer_index, message=message))
 
             return SVMModel(best_model, version, self.feature_provider, self.probability)
 

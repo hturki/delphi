@@ -3,6 +3,7 @@ import pickle
 import threading
 import time
 from itertools import cycle
+from pathlib import Path
 from typing import List, Dict
 
 import torch.multiprocessing as mp
@@ -14,6 +15,7 @@ from delphi.context.model_trainer_context import ModelTrainerContext
 from delphi.model import Model
 from delphi.model_trainer import TrainingStyle, DataRequirement
 from delphi.proto.internal_pb2 import InternalMessage
+from delphi.proto.search_pb2 import SearchId
 from delphi.proto.svm_trainer_pb2 import SetTrainResult, SVMTrainerMessage, SetParamGrid
 from delphi.svm.feature_cache import FeatureCache
 from delphi.svm.svm_model import SVMModel
@@ -22,11 +24,12 @@ from delphi.svm.svm_trainer_base import SVMTrainerBase
 
 class DistributedSVMTrainer(SVMTrainerBase):
 
-    def __init__(self, context: ModelTrainerContext, model_dir: str, feature_extractor: str, cache: FeatureCache,
-                 probability: bool, linear_only: bool, trainer_index: int):
+    def __init__(self, context: ModelTrainerContext, model_dir: Path, feature_extractor: str, cache: FeatureCache,
+                 probability: bool, linear_only: bool, search_id: SearchId, trainer_index: int):
         super().__init__(context, model_dir, feature_extractor, cache, probability)
 
         self._linear_only = linear_only
+        self._search_id = search_id
         self._trainer_index = trainer_index
 
         self._param_grid = []
@@ -47,7 +50,7 @@ class DistributedSVMTrainer(SVMTrainerBase):
     def training_style(self) -> TrainingStyle:
         return TrainingStyle.DISTRIBUTED
 
-    def train_model(self, train_dir: str) -> Model:
+    def train_model(self, train_dir: Path) -> Model:
         version = self.get_new_version()
 
         with self._param_grid_lock:
@@ -76,7 +79,7 @@ class DistributedSVMTrainer(SVMTrainerBase):
                                                                          model=pickle.dumps(
                                                                              best_model[0]))))
             self.context.nodes[0].internal.MessageInternal(
-                InternalMessage(trainerIndex=self._trainer_index, message=message))
+                InternalMessage(searchId=self._search_id, trainerIndex=self._trainer_index, message=message))
             return SVMModel(best_model[0], version, self.feature_provider, self.probability)
 
     def message_internal(self, request: Any) -> Any:
@@ -150,12 +153,12 @@ class DistributedSVMTrainer(SVMTrainerBase):
                     message = Any()
                     message.Pack(SVMTrainerMessage(setParamGrid=SetParamGrid(grid=json.dumps(param_grids[i]))))
                     self.context.nodes[i].internal.MessageInternal(
-                        InternalMessage(trainerIndex=self._trainer_index, message=message))
+                        InternalMessage(searchId=self._search_id, trainerIndex=self._trainer_index, message=message))
                     break
                 except Exception as e:
                     logger.warn(
-                        'Could not set param grid - node {} might still not be up'.format(self.context.nodes[i].host))
+                        'Could not set param grid - node {} might still not be up'.format(self.context.nodes[i].url))
                     logger.exception(e)
                     time.sleep(5)
 
-            logger.info('Set param grid on node {}'.format(self.context.nodes[i].host))
+            logger.info('Set param grid on node {}'.format(self.context.nodes[i].url))

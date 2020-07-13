@@ -1,18 +1,28 @@
 syntax = "proto3";
 
 import "google/protobuf/empty.proto";
+import "proto/search.proto";
 
 service LearningModuleService {
-   rpc Infer (stream InferRequest) returns (stream InferResult);
-   rpc AddLabeledExamples (stream LabeledExample) returns (google.protobuf.Empty);
-   rpc GetModelStatistics (google.protobuf.Empty) returns (ModelStatistics);
-   rpc ImportModel (ImportModelRequest) returns (google.protobuf.Empty);
-   rpc ExportModel (google.protobuf.Empty) returns (ModelArchive);
+  rpc GetResults (SearchId) returns (stream InferResult);
+  rpc Infer (stream InferRequest) returns (stream InferResult);
+  rpc AddLabeledExamples (stream LabeledExampleRequest) returns (google.protobuf.Empty);
+  rpc GetModelStatistics (SearchId) returns (ModelStatistics);
+  rpc ImportModel (ImportModelRequest) returns (google.protobuf.Empty);
+  rpc ExportModel (SearchId) returns (ModelArchive);
 }
 
 message InferRequest {
+  oneof value {
+    SearchId searchId = 1;
+    InferObject object = 2;
+  }
+}
+
+message InferObject {
   string objectId = 1;
   bytes content = 2;
+  map<string, bytes> attributes = 3;
 }
 
 message InferResult {
@@ -20,21 +30,14 @@ message InferResult {
   string label = 2;
   double score = 3;
   int32 modelVersion = 4;
+  map<string, bytes> attributes = 5;
 }
 
-message LabeledExample {
-  string label = 1;
-  bytes content = 2;
-  ExampleSetWrapper exampleSet = 3;
-}
-
-enum ExampleSet {
-  TRAIN = 0;
-  TEST = 1;
-}
-
-message ExampleSetWrapper {
-  ExampleSet value = 1;
+message LabeledExampleRequest {
+  oneof value {
+    SearchId searchId = 1;
+    LabeledExample example = 2;
+  }
 }
 
 message ModelStatistics {
@@ -59,8 +62,9 @@ message ModelMetrics {
 }
 
 message ImportModelRequest {
-  int32 version = 1;
-  bytes content = 2;
+  SearchId searchId = 1;
+  int32 version = 2;
+  bytes content = 3;
 }
 
 message ModelArchive {

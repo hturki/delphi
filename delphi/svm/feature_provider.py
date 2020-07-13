@@ -1,4 +1,5 @@
 import io
+from pathlib import Path
 from typing import List, Optional, Dict
 
 import torch
@@ -24,7 +25,7 @@ class Identity(nn.Module):
 
 class FeatureProvider(object):
 
-    def __init__(self, model_dir: Optional[str], feature_extractor: str, cache: FeatureCache):
+    def __init__(self, model_dir: Optional[Path], feature_extractor: str, cache: FeatureCache):
         self.feature_extractor = feature_extractor
         self.cache = cache
 
@@ -63,7 +64,7 @@ class FeatureProvider(object):
         self.cache.put(results, expire)
         return results
 
-    def _get_model(self, model_dir: str):
+    def _get_model(self, model_dir: Path):
         if self.feature_extractor == 'mobilenet_v2':
             model = models.mobilenet_v2(pretrained=True)
             model.classifier = Identity()

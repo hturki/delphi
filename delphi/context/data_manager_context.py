@@ -1,15 +1,22 @@
 from abc import abstractmethod
+from pathlib import Path
 from typing import List
 
 from delphi.context.context_base import ContextBase
 from delphi.model_trainer import ModelTrainer
+from delphi.proto.search_pb2 import SearchId
 
 
 class DataManagerContext(ContextBase):
 
     @property
     @abstractmethod
-    def data_dir(self) -> str:
+    def search_id(self) -> SearchId:
+        pass
+
+    @property
+    @abstractmethod
+    def data_dir(self) -> Path:
         pass
 
     @abstractmethod

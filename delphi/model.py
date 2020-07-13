@@ -1,7 +1,8 @@
 from abc import ABCMeta, abstractmethod
+from pathlib import Path
 from typing import Callable, Iterator
 
-from delphi.proto.learning_module_pb2 import InferResult, InferRequest
+from delphi.proto.learning_module_pb2 import InferResult, InferObject
 
 
 class Model(metaclass=ABCMeta):
@@ -12,11 +13,11 @@ class Model(metaclass=ABCMeta):
         pass
 
     @abstractmethod
-    def infer(self, requests: Iterator[InferRequest]) -> Iterator[InferResult]:
+    def infer(self, requests: Iterator[InferObject]) -> Iterator[InferResult]:
         pass
 
     @abstractmethod
-    def infer_dir(self, directory: str, callback_fn: Callable[[int, float], None]) -> None:
+    def infer_dir(self, directory: Path, callback_fn: Callable[[int, float], None]) -> None:
         pass
 
     @abstractmethod

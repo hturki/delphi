@@ -1,5 +1,6 @@
 from abc import ABCMeta, abstractmethod
 from enum import Enum, auto, unique
+from pathlib import Path
 
 from google.protobuf.any_pb2 import Any
 
@@ -40,7 +41,7 @@ class ModelTrainer(metaclass=ABCMeta):
         pass
 
     @abstractmethod
-    def train_model(self, train_dir: str) -> Model:
+    def train_model(self, train_dir: Path) -> Model:
         pass
 
     @abstractmethod
