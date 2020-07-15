@@ -89,5 +89,6 @@ ENV/
 # Rope project settings
 .ropeproject
 
+.gradle
 .idea
 delphi/proto

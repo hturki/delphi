@@ -1,0 +1,111 @@
+buildscript {
+  repositories {
+      mavenCentral()
+      maven { url 'http://palantir.bintray.com/releases' }
+  }
+
+  dependencies {
+      classpath 'com.google.protobuf:protobuf-gradle-plugin:0.8.12'
+      classpath 'com.palantir.gradle.gitversion:gradle-git-version:0.12.3'
+  }
+}
+
+repositories {
+  mavenCentral()
+  maven { url 'http://palantir.bintray.com/releases' }
+}
+
+apply plugin: 'java-library'
+apply plugin: 'maven-publish'
+apply plugin: 'signing'
+apply plugin: 'com.google.protobuf'
+apply plugin: 'com.palantir.git-version'
+
+protobuf {
+    protoc {
+        artifact = 'com.google.protobuf:protoc:3.12.3'
+    }
+
+    plugins {
+        grpc {
+            artifact = 'io.grpc:protoc-gen-grpc-java:1.30.2'
+        }
+    }
+
+    generateProtoTasks {
+        all()*.plugins { grpc {} }
+    }
+}
+
+group 'edu.cmu.cs.delphi'
+version gitVersion()
+sourceCompatibility = '11'
+targetCompatibility = '11'
+
+sourceSets {
+  main {
+    proto {
+      // In addition to the default 'src/main/proto'
+      srcDir 'protos'
+    }
+  }
+}
+
+dependencies {
+    compile 'com.google.protobuf:protobuf-java:3.12.2'
+    compile 'io.grpc:grpc-protobuf:1.30.2'
+    compile 'io.grpc:grpc-stub:1.30.2'
+
+    compileOnly 'javax.annotation:javax.annotation-api:1.3.2'
+}
+
+java {
+    withJavadocJar()
+    withSourcesJar()
+}
+
+publishing {
+    publications {
+        maven(MavenPublication) {
+            pom {
+                name = 'Delphi API'
+                description = "Contains Java bindings for Delphi's API"
+                url = 'https://github.com/hturki/delphi'
+                licenses {
+                    license {
+                        name = 'Eclipse Public License - v 1.0'
+                        url = 'https://www.eclipse.org/legal/epl-v10.html'
+                    }
+                }
+                developers {
+                    developer {
+                        id = 'hturki'
+                        name = 'Haithem Turki'
+                        email = 'hturki@cs.cmu.edu'
+                    }
+                }
+                scm {
+                    url = 'https://github.com/hturki/delphi'
+                }
+            }
+            from components.java
+        }
+    }
+    repositories {
+        maven {
+            // change URLs to point to your repos, e.g. http://my.org/repo
+            def releasesRepoUrl = "https://oss.sonatype.org/content/repositories/snapshots"
+            def snapshotsRepoUrl = "https://oss.sonatype.org/service/local/staging/deploy/maven2"
+            url = versionDetails().isCleanTag ? snapshotsRepoUrl : releasesRepoUrl
+
+            credentials {
+                username = System.env.MAVEN_UPLOAD_USER
+                password = System.env.MAVEN_UPLOAD_PWD
+            }
+        }
+    }
+}
+
+signing {
+    sign publishing.publications
+}

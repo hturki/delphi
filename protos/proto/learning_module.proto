@@ -1,7 +1,10 @@
 syntax = "proto3";
+option java_multiple_files = true;
 
 import "google/protobuf/empty.proto";
 import "proto/search.proto";
+
+package edu.cmu.cs.delphi.api;
 
 service LearningModuleService {
   rpc GetResults (SearchId) returns (stream InferResult);
