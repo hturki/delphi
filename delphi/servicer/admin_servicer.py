@@ -4,7 +4,7 @@ from google.protobuf.wrappers_pb2 import Int32Value
 
 from delphi.proto.admin_pb2 import ResetRequest
 from delphi.proto.admin_pb2_grpc import AdminServiceServicer
-from delphi.proto.search_pb2 import SearchId
+from delphi.proto.learning_module_pb2 import SearchId
 from delphi.search_manager import SearchManager
 from delphi.utils import log_exceptions_and_abort
 

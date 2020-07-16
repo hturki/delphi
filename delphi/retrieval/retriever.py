@@ -1,7 +1,7 @@
 from abc import ABCMeta, abstractmethod
-from typing import Iterator
+from typing import Iterator, Iterable
 
-from delphi.proto.learning_module_pb2 import InferObject
+from delphi.proto.learning_module_pb2 import DelphiObject
 
 
 class Retriever(metaclass=ABCMeta):
@@ -15,5 +15,9 @@ class Retriever(metaclass=ABCMeta):
         pass
 
     @abstractmethod
-    def get_objects(self) -> Iterator[InferObject]:
+    def get_objects(self) -> Iterator[DelphiObject]:
+        pass
+
+    @abstractmethod
+    def get_object(self, object_id: str, attributes: Iterable[str]) -> DelphiObject:
         pass

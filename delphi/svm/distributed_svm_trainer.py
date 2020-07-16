@@ -15,7 +15,7 @@ from delphi.context.model_trainer_context import ModelTrainerContext
 from delphi.model import Model
 from delphi.model_trainer import TrainingStyle, DataRequirement
 from delphi.proto.internal_pb2 import InternalMessage
-from delphi.proto.search_pb2 import SearchId
+from delphi.proto.learning_module_pb2 import SearchId
 from delphi.proto.svm_trainer_pb2 import SetTrainResult, SVMTrainerMessage, SetParamGrid
 from delphi.svm.feature_cache import FeatureCache
 from delphi.svm.svm_model import SVMModel

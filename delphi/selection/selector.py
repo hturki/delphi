@@ -12,6 +12,10 @@ class Selector(metaclass=ABCMeta):
         pass
 
     @abstractmethod
+    def finish(self) -> None:
+        pass
+
+    @abstractmethod
     def get_results(self) -> Iterator[InferResult]:
         pass
 

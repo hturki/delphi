@@ -4,7 +4,7 @@ from typing import List
 
 from delphi.context.context_base import ContextBase
 from delphi.model_trainer import ModelTrainer
-from delphi.proto.search_pb2 import SearchId
+from delphi.proto.learning_module_pb2 import SearchId
 
 
 class DataManagerContext(ContextBase):

@@ -31,6 +31,9 @@ class TopKSelector(Selector):
                 self._result_queue.put(self._priority_queues[-1].get()[1])
             self._batch_added = 0
 
+    def finish(self) -> None:
+        self._result_queue.put(None)
+
     def get_results(self) -> Iterator[InferResult]:
         yield from self._result_iterator
 

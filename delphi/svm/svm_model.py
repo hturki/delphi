@@ -13,7 +13,7 @@ from sklearn.ensemble import VotingClassifier
 from sklearn.svm import LinearSVC, SVC
 
 from delphi.model import Model
-from delphi.proto.learning_module_pb2 import InferResult, InferObject
+from delphi.proto.learning_module_pb2 import InferResult, DelphiObject
 from delphi.svm.feature_provider import FeatureProvider, BATCH_SIZE, get_worker_feature_provider, \
     set_worker_feature_provider
 from delphi.utils import log_exceptions
@@ -40,7 +40,7 @@ def load_from_path(image_path: Path) -> Tuple[str, bool, Union[List[float], Any]
 
 # return object_id, whether to preprocess, vector or (image, key)
 @log_exceptions
-def load_from_content(request: InferObject) -> Tuple[str, bool, Union[List[float], Any]]:
+def load_from_content(request: DelphiObject) -> Tuple[str, bool, Union[List[float], Any]]:
     key = get_worker_feature_provider().get_result_key_content(request.content)
     cached_vector = get_worker_feature_provider().get_cached_vector(key)
     if cached_vector is not None:
@@ -64,7 +64,7 @@ class SVMModel(Model):
     def version(self) -> int:
         return self._version
 
-    def infer(self, requests: Iterator[InferObject]) -> Iterator[InferResult]:
+    def infer(self, requests: Iterator[DelphiObject]) -> Iterator[InferResult]:
         with mp.Pool(min(16, mp.cpu_count()), initializer=set_worker_feature_provider,
                      initargs=(self._feature_provider.feature_extractor,
                                self._feature_provider.cache)) as pool:

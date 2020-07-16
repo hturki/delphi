@@ -1,4 +1,4 @@
-import multiprocessing as mp
+simport multiprocessing as mp
 from abc import abstractmethod
 from pathlib import Path
 from typing import List, Callable, Iterator, Tuple
@@ -9,11 +9,11 @@ from torch.utils.data import DataLoader
 from torchvision import datasets
 
 from delphi.model import Model
-from delphi.proto.learning_module_pb2 import InferResult, InferObject
+from delphi.proto.learning_module_pb2 import InferResult, DelphiObject
 from delphi.pytorch.pytorch_trainer_base import get_test_transforms
 
 
-def preprocess(request: InferObject) -> Tuple[str, torch.Tensor]:
+def preprocess(request: DelphiObject) -> Tuple[str, torch.Tensor]:
     return request.objectId, get_test_transforms()(request.content)
 
 
@@ -35,7 +35,7 @@ class PytorchModelBase(Model):
     def version(self) -> int:
         return self._version
 
-    def infer(self, requests: Iterator[InferObject]) -> Iterator[InferResult]:
+    def infer(self, requests: Iterator[DelphiObject]) -> Iterator[InferResult]:
         batch = []
         items = self._pool.imap_unordered(preprocess, requests)
 

@@ -10,8 +10,7 @@ from logzero import logger
 from delphi.context.data_manager_context import DataManagerContext
 from delphi.model_trainer import DataRequirement
 from delphi.proto.internal_pb2 import ExampleMetadata, GetExamplesRequest, GetExampleRequest
-from delphi.proto.learning_module_pb2 import LabeledExampleRequest
-from delphi.proto.search_pb2 import LabeledExample, ExampleSet
+from delphi.proto.learning_module_pb2 import LabeledExample, ExampleSet, LabeledExampleRequest
 from delphi.utils import get_example_key, to_iter
 
 TMP_DIR = 'test-0'

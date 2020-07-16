@@ -26,8 +26,8 @@ from delphi.model import Model
 from delphi.model_trainer import ModelTrainer, TrainingStyle
 from delphi.proto.internal_pb2 import ExampleMetadata, TestResult, StageModelRequest, TrainModelRequest, \
     DiscardModelRequest, PromoteModelRequest, SubmitTestRequest, ValidateTestResultsRequest
-from delphi.proto.learning_module_pb2 import ModelStatistics, ModelMetrics, ModelArchive, InferResult, InferObject
-from delphi.proto.search_pb2 import SearchId, LabeledExample, ExampleSet
+from delphi.proto.learning_module_pb2 import ModelStatistics, ModelMetrics, ModelArchive, InferResult, \
+    SearchId, LabeledExample, ExampleSet, DelphiObject
 from delphi.retrain.retrain_policy import RetrainPolicy
 from delphi.retrieval.retriever import Retriever
 from delphi.selection.selector import Selector
@@ -38,7 +38,7 @@ class Search(DataManagerContext, ModelTrainerContext):
     trainers: List[ModelCondition]
 
     def __init__(self, id: SearchId, node_index: int, nodes: List[LearningModuleStub], retrain_policy: RetrainPolicy,
-                 only_use_better_models: bool, root_dir: Path, port: int, selector: Selector):
+                 only_use_better_models: bool, root_dir: Path, port: int, retriever: Retriever, selector: Selector):
         self._id = id
         self._node_index = node_index
         self._nodes = nodes
@@ -49,6 +49,8 @@ class Search(DataManagerContext, ModelTrainerContext):
 
         self._only_use_better_models = only_use_better_models
         self._port = port
+
+        self.retriever = retriever
         self.selector = selector
 
         self._model: Optional[Model] = None
@@ -74,7 +76,7 @@ class Search(DataManagerContext, ModelTrainerContext):
         if self._node_index == 0:
             threading.Thread(target=self._train_thread, name='train-model').start()
 
-    def infer(self, requests: Iterator[InferObject]) -> Iterator[InferResult]:
+    def infer(self, requests: Iterator[DelphiObject]) -> Iterator[InferResult]:
         with self._model_lock:
             model = self._model
 
@@ -249,13 +251,13 @@ class Search(DataManagerContext, ModelTrainerContext):
             self._retrain_policy.reset()
             self._model_event.set()
 
-    def start(self, retriever: Retriever, examples: Iterator[LabeledExample]):
-        threading.Thread(target=self._retriever_thread, args=(retriever, examples), name='get-objects').start()
+    def start(self, examples: Iterator[LabeledExample]):
+        threading.Thread(target=self._retriever_thread, args=(examples), name='get-objects').start()
 
     @log_exceptions
-    def _retriever_thread(self, retriever: Retriever, examples: Iterator[LabeledExample]):
+    def _retriever_thread(self, examples: Iterator[LabeledExample]):
         try:
-            retriever.start()
+            self.retriever.start()
             peekable_examples = peekable(examples)
             if peekable_examples.peek(None) is not None:
                 assert self._node_index == 0
@@ -263,10 +265,11 @@ class Search(DataManagerContext, ModelTrainerContext):
                 self._data_manager.add_labeled_examples(peekable_examples)
                 self._initial_model_event.set()
 
-            for result in self.infer(retriever.get_objects()):
+            for result in self.infer(self.retriever.get_objects()):
                 self.selector.add_result(result)
         finally:
-            retriever.stop()
+            self.retriever.stop()
+            self.selector.finish()
 
     @log_exceptions
     def _train_thread(self):

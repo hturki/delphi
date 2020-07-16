@@ -12,12 +12,11 @@ import multiprocessing_logging
 import yaml
 from logzero import logger
 
-from delphi.proto import learning_module_pb2_grpc, internal_pb2_grpc, admin_pb2_grpc, search_pb2_grpc
+from delphi.proto import learning_module_pb2_grpc, internal_pb2_grpc, admin_pb2_grpc
 from delphi.search_manager import SearchManager
 from delphi.servicer.admin_servicer import AdminServicer
 from delphi.servicer.internal_servicer import InternalServicer
 from delphi.servicer.learning_module_servicer import LearningModuleServicer
-from delphi.servicer.search_servicer import SearchServicer
 from delphi.svm.fs_feature_cache import FSFeatureCache
 from delphi.svm.noop_feature_cache import NoopFeatureCache
 from delphi.svm.redis_feature_cache import RedisFeatureCache
@@ -69,9 +68,9 @@ def main():
 
     port = config['port']
 
-    search_servicer = SearchServicer(manager, Path(config['root_dir']), Path(config['model_dir']), feature_cache, port)
-    search_pb2_grpc.add_SearchServiceServicer_to_server(search_servicer, server)
-    learning_module_pb2_grpc.add_LearningModuleServiceServicer_to_server(LearningModuleServicer(manager), server)
+    learning_module_servicer = LearningModuleServicer(manager, Path(config['root_dir']), Path(config['model_dir']),
+                                                      feature_cache, port)
+    learning_module_pb2_grpc.add_LearningModuleServiceServicer_to_server(learning_module_servicer, server)
     internal_pb2_grpc.add_InternalServiceServicer_to_server(InternalServicer(manager), server)
     admin_pb2_grpc.add_AdminServiceServicer_to_server(AdminServicer(manager), server)
 
