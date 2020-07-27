@@ -157,9 +157,9 @@ message ModelConfig {
 
 message SVMConfig {
   SVMMode mode = 1;
-  google.protobuf.BoolValue featureExtractor = 2;
-  google.protobuf.BoolValue probability = 3;
-  google.protobuf.BoolValue linearOnly = 4;
+  string featureExtractor = 2;
+  bool probability = 3;
+  bool linearOnly = 4;
 }
 
 enum SVMMode {
@@ -169,14 +169,14 @@ enum SVMMode {
 }
 
 message FastMPNCOVConfig {
-  google.protobuf.BoolValue distributed = 1;
+  bool distributed = 1;
   google.protobuf.Int32Value freeze = 2;
 }
 
 message WSDANConfig {
-  google.protobuf.BoolValue distributed = 1;
+  bool distributed = 1;
   google.protobuf.Int32Value freeze = 2;
-  google.protobuf.BoolValue visualize = 3;
+  bool visualize = 3;
 }
 
 message RetrainPolicyConfig {

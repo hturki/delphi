@@ -15,8 +15,8 @@ from delphi.context.model_trainer_context import ModelTrainerContext
 from delphi.learning_module_stub import LearningModuleStub
 from delphi.mpncov.mpncov_trainer import MPNCovTrainer
 from delphi.proto.learning_module_pb2 import InferRequest, InferResult, ModelStatistics, \
-    ImportModelRequest, ModelArchive, LabeledExampleRequest, SearchId, GetResultDataRequest, \
-    AddLabeledExampleIdsRequest, LabeledExample, DelphiObject
+    ImportModelRequest, ModelArchive, LabeledExampleRequest, SearchId, \
+    AddLabeledExampleIdsRequest, LabeledExample, DelphiObject, GetObjectsRequest
 from delphi.proto.learning_module_pb2 import SearchRequest, RetrainPolicyConfig, SVMMode, SVMConfig, Dataset, \
     SelectorConfig, ReexaminationStrategyConfig
 from delphi.proto.learning_module_pb2_grpc import LearningModuleServiceServicer
@@ -76,7 +76,8 @@ class LearningModuleServicer(LearningModuleServiceServicer):
             if model.HasField('svm'):
                 trainer = self._get_svm_trainer(search, config.searchId, i, model.svm)
             elif model.HasField('fastMPNCOV'):
-                trainer = MPNCovTrainer(search, model.fastMPNCOV.distributed, model.fastMPNCOV.freeze, self._model_dir)
+                trainer = MPNCovTrainer(search, model.fastMPNCOV.distributed, model.fastMPNCOV.freeze.value,
+                                        self._model_dir)
             elif model.HasField('wsdan'):
                 trainer = WSDANTrainer(search, model.wsdan.distributed, model.wsdan.visualize, model.wsdan.freeze)
             else:
@@ -93,7 +94,6 @@ class LearningModuleServicer(LearningModuleServiceServicer):
         search.start(x.example for x in request)
         return Empty()
 
-
     @log_exceptions_and_abort
     def StopSearch(self, request: SearchId, context: grpc.ServicerContext) -> Empty:
         self._manager.remove_search(request)
@@ -104,7 +104,7 @@ class LearningModuleServicer(LearningModuleServiceServicer):
         yield from self._manager.get_search(request).selector.get_results()
 
     @log_exceptions_and_abort
-    def GetObjects(self, request: GetResultDataRequest, context: grpc.ServicerContext) -> Iterator[DelphiObject]:
+    def GetObjects(self, request: GetObjectsRequest, context: grpc.ServicerContext) -> Iterator[DelphiObject]:
         retriever = self._get_retriever(request.dataset)
         for object_id in request.objectIds:
             yield retriever.get_object(object_id, request.attributes)
@@ -126,7 +126,7 @@ class LearningModuleServicer(LearningModuleServiceServicer):
         examples = []
         for object_id in request.examples:
             example = search.retriever.get_object(object_id, [ATTR_DATA])
-            examples.append(LabeledExample(label=request.examples[object_id], content=example[ATTR_DATA]))
+            examples.append(LabeledExample(label=request.examples[object_id], content=example.content))
 
         search.add_labeled_examples(examples)
         return Empty()
