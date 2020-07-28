@@ -60,7 +60,7 @@ def main():
     if cache_config['type'] == 'redis':
         feature_cache = RedisFeatureCache(cache_config['port'])
     elif cache_config['type'] == 'filesystem':
-        feature_cache = FSFeatureCache(cache_config['feature_dir'])
+        feature_cache = FSFeatureCache(Path(cache_config['feature_dir']))
     elif cache_config['type'] == 'noop':
         feature_cache = NoopFeatureCache()
     else:

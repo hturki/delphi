@@ -1,4 +1,4 @@
-simport multiprocessing as mp
+import multiprocessing as mp
 from abc import abstractmethod
 from pathlib import Path
 from typing import List, Callable, Iterator, Tuple

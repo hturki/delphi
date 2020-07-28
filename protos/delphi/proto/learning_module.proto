@@ -210,7 +210,7 @@ message DiamondDataset {
 
 message Filter {
   bytes code = 1;
-  repeated string dependences = 2;
+  repeated string dependencies = 2;
   repeated string arguments = 3;
   string name = 4;
   double minScore = 5;

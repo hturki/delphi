@@ -91,4 +91,4 @@ ENV/
 
 .gradle
 .idea
-delphi/proto
+delphi/proto/*_pb2*
