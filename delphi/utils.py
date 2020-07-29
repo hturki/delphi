@@ -3,7 +3,7 @@ import multiprocessing as mp
 import sys
 from functools import wraps
 from queue import Queue
-from typing import List, Union, Iterator, Any
+from typing import List, Union, Iterable, Any
 
 import grpc
 import numpy as np
@@ -50,7 +50,7 @@ def get_weights(targets: List[int], num_classes=2) -> List[int]:
     return weight
 
 
-def to_iter(queue: Union[Queue, mp.Queue]) -> Iterator[Any]:
+def to_iter(queue: Union[Queue, mp.Queue]) -> Iterable[Any]:
     def iterate():
         while True:
             example = queue.get()

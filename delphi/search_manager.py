@@ -12,16 +12,16 @@ class SearchManager(object):
 
     def set_search(self, search_id: SearchId, search: Search) -> None:
         with self._lock:
-            assert search_id not in self._searches
-            self._searches[search_id] = search
+            assert search_id.value not in self._searches
+            self._searches[search_id.value] = search
 
     def get_search(self, search_id: SearchId) -> Search:
         with self._lock:
-            return self._searches[search_id]
+            return self._searches[search_id.value]
 
     def remove_search(self, search_id: SearchId) -> Search:
         with self._lock:
-            search = self._searches[search_id]
-            del self._searches[search_id]
+            search = self._searches[search_id.value]
+            del self._searches[search_id.value]
 
         return search

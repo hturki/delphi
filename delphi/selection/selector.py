@@ -1,5 +1,5 @@
 from abc import ABCMeta, abstractmethod
-from typing import Iterator
+from typing import Iterable, Optional
 
 from delphi.model import Model
 from delphi.proto.learning_module_pb2 import InferResult
@@ -16,9 +16,9 @@ class Selector(metaclass=ABCMeta):
         pass
 
     @abstractmethod
-    def get_results(self) -> Iterator[InferResult]:
+    def get_results(self) -> Iterable[InferResult]:
         pass
 
     @abstractmethod
-    def new_model(self, model: Model) -> None:
+    def new_model(self, model: Optional[Model]) -> None:
         pass

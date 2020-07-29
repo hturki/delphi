@@ -3,7 +3,7 @@ import threading
 from collections import defaultdict
 from contextlib import contextmanager
 from pathlib import Path
-from typing import Dict, List, Iterator, Callable, Optional, Tuple
+from typing import Dict, List, Iterable, Callable, Optional, Tuple
 
 from logzero import logger
 
@@ -43,7 +43,7 @@ class DataManager(object):
         self._stored_examples_event = threading.Event()
         threading.Thread(target=self._promote_staging_examples, name='promote-staging-examples').start()
 
-    def add_labeled_examples(self, examples: Iterator[LabeledExample]) -> None:
+    def add_labeled_examples(self, examples: Iterable[LabeledExample]) -> None:
         data_requirement = self._get_data_requirement()
 
         if data_requirement is DataRequirement.MASTER_ONLY:
@@ -80,7 +80,7 @@ class DataManager(object):
                 self._store_labeled_examples(examples, None)
 
     @contextmanager
-    def get_examples(self, example_set: ExampleSet) -> Iterator[Path]:
+    def get_examples(self, example_set: ExampleSet) -> Iterable[Path]:
         with self._examples_lock:
             if self._context.node_index != 0:
                 if example_set is ExampleSet.TRAIN:
@@ -106,7 +106,7 @@ class DataManager(object):
                 else:
                     yield example_dir
 
-    def get_example_stream(self, example_set: ExampleSet, node_index: int) -> Iterator[ExampleMetadata]:
+    def get_example_stream(self, example_set: ExampleSet, node_index: int) -> Iterable[ExampleMetadata]:
         assert self._examples_lock.locked()
         assert self._context.node_index == 0
         assert node_index != 0
@@ -148,7 +148,7 @@ class DataManager(object):
             else:
                 child.unlink()
 
-    def _store_labeled_examples(self, examples: Iterator[LabeledExample],
+    def _store_labeled_examples(self, examples: Iterable[LabeledExample],
                                 callback: Optional[Callable[[LabeledExample], None]]) -> None:
         with self._staging_lock:
             old_dirs = []

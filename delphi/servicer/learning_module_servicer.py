@@ -1,5 +1,5 @@
 from pathlib import Path
-from typing import Iterator
+from typing import Iterable
 
 import grpc
 from google.protobuf import json_format
@@ -52,7 +52,7 @@ class LearningModuleServicer(LearningModuleServiceServicer):
         self._port = port
 
     @log_exceptions_and_abort
-    def StartSearch(self, request: Iterator[SearchRequest], context: grpc.ServicerContext) -> Empty:
+    def StartSearch(self, request: Iterable[SearchRequest], context: grpc.ServicerContext) -> Empty:
         config = next(request).config
         retrain_policy = self._get_retrain_policy(config.retrainPolicy)
 
@@ -96,26 +96,27 @@ class LearningModuleServicer(LearningModuleServiceServicer):
 
     @log_exceptions_and_abort
     def StopSearch(self, request: SearchId, context: grpc.ServicerContext) -> Empty:
-        self._manager.remove_search(request)
+        search = self._manager.remove_search(request)
+        search.stop()
         return Empty()
 
     @log_exceptions_and_abort
-    def GetResults(self, request: SearchId, context: grpc.ServicerContext) -> Iterator[InferResult]:
+    def GetResults(self, request: SearchId, context: grpc.ServicerContext) -> Iterable[InferResult]:
         yield from self._manager.get_search(request).selector.get_results()
 
     @log_exceptions_and_abort
-    def GetObjects(self, request: GetObjectsRequest, context: grpc.ServicerContext) -> Iterator[DelphiObject]:
+    def GetObjects(self, request: GetObjectsRequest, context: grpc.ServicerContext) -> Iterable[DelphiObject]:
         retriever = self._get_retriever(request.dataset)
         for object_id in request.objectIds:
             yield retriever.get_object(object_id, request.attributes)
 
     @log_exceptions_and_abort
-    def Infer(self, request: Iterator[InferRequest], context: grpc.ServicerContext) -> Iterator[InferResult]:
+    def Infer(self, request: Iterable[InferRequest], context: grpc.ServicerContext) -> Iterable[InferResult]:
         search_id = next(request).searchId
         yield from self._manager.get_search(search_id).infer(x.object for x in request)
 
     @log_exceptions_and_abort
-    def AddLabeledExamples(self, request: Iterator[LabeledExampleRequest], context: grpc.ServicerContext) -> Empty:
+    def AddLabeledExamples(self, request: Iterable[LabeledExampleRequest], context: grpc.ServicerContext) -> Empty:
         search_id = next(request).searchId
         self._manager.get_search(search_id).add_labeled_examples(x.example for x in request)
         return Empty()
@@ -195,7 +196,7 @@ class LearningModuleServicer(LearningModuleServiceServicer):
     def _get_retriever(self, dataset: Dataset) -> Retriever:
         if dataset.HasField('diamond'):
             diamond_search = DiamondSearch([ScopeCookie.parse(x) for x in dataset.diamond.cookies],
-                                           [FilterSpec(x.name, x.code, x.arguments, Blob(x.blob), x.dependencies,
+                                           [FilterSpec(x.name, Blob(x.code), x.arguments, Blob(x.blob), x.dependencies,
                                                        x.minScore, x.maxScore) for x in dataset.diamond.filters],
                                            dataset.diamond.attributes)
             return DiamondRetriever(diamond_search)

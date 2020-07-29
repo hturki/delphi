@@ -1,10 +1,9 @@
 import multiprocessing as mp
-import multiprocessing as mp
 import pickle
 import queue
 import threading
 from pathlib import Path
-from typing import Callable, Iterator, List, Tuple, Any, Union
+from typing import Callable, Iterable, List, Tuple, Any, Union
 
 import torch
 from logzero import logger
@@ -19,9 +18,9 @@ from delphi.svm.feature_provider import FeatureProvider, BATCH_SIZE, get_worker_
 from delphi.utils import log_exceptions
 
 
-# return object_id, whether to preprocess, vector or (image, key)
+# return object_id, empty map, whether to preprocess, vector or (image, key)
 @log_exceptions
-def load_from_path(image_path: Path) -> Tuple[str, bool, Union[List[float], Any]]:
+def load_from_path(image_path: Path) -> Tuple[str, Any, bool, Union[List[float], Any]]:
     split = image_path.parts
     label = split[-2]
     name = split[-1]
@@ -30,23 +29,24 @@ def load_from_path(image_path: Path) -> Tuple[str, bool, Union[List[float], Any]
     key = get_worker_feature_provider().get_result_key_name(name)
     cached_vector = get_worker_feature_provider().get_cached_vector(key)
     if cached_vector is not None:
-        return object_id, False, cached_vector
+        return object_id, {}, False, cached_vector
     else:
         with image_path.open('rb') as f:
             content = f.read()
 
-        return object_id, True, (get_worker_feature_provider().preprocess(content).numpy(), key)
+        return object_id, {}, True, (get_worker_feature_provider().preprocess(content).numpy(), key)
 
 
-# return object_id, whether to preprocess, vector or (image, key)
+# return object_id, attributes, whether to preprocess, vector or (image, key)
 @log_exceptions
-def load_from_content(request: DelphiObject) -> Tuple[str, bool, Union[List[float], Any]]:
+def load_from_content(request: DelphiObject) -> Tuple[str, Any, bool, Union[List[float], Any]]:
     key = get_worker_feature_provider().get_result_key_content(request.content)
     cached_vector = get_worker_feature_provider().get_cached_vector(key)
     if cached_vector is not None:
-        return request.objectId, False, cached_vector
+        return request.objectId, request.attributes, False, cached_vector
     else:
-        return request.objectId, True, (get_worker_feature_provider().preprocess(request.content).numpy(), key)
+        return request.objectId, request.attributes, True, \
+               (get_worker_feature_provider().preprocess(request.content).numpy(), key)
 
 
 class SVMModel(Model):
@@ -64,7 +64,7 @@ class SVMModel(Model):
     def version(self) -> int:
         return self._version
 
-    def infer(self, requests: Iterator[DelphiObject]) -> Iterator[InferResult]:
+    def infer(self, requests: Iterable[DelphiObject]) -> Iterable[InferResult]:
         with mp.Pool(min(16, mp.cpu_count()), initializer=set_worker_feature_provider,
                      initargs=(self._feature_provider.feature_extractor,
                                self._feature_provider.cache)) as pool:
@@ -94,7 +94,7 @@ class SVMModel(Model):
     def scores_are_probabilities(self) -> bool:
         return self._probability
 
-    def _infer_inner(self, images: Iterator[Tuple[str, bool, Union[List[float], Any]]]) -> Iterator[InferResult]:
+    def _infer_inner(self, images: Iterable[Tuple[str, Any, bool, Union[List[float], Any]]]) -> Iterable[InferResult]:
         feature_queue = queue.Queue()
 
         @log_exceptions
@@ -102,10 +102,11 @@ class SVMModel(Model):
             cached = 0
             uncached = 0
             batch = []
-            for object_id, should_process, payload in images:
+            for object_id, attributes, should_process, payload in images:
                 if should_process:
                     image, key = payload
                     batch.append((object_id,
+                                  attributes,
                                   torch.from_numpy(image).to(self._feature_provider.device, non_blocking=True),
                                   key))
                     if len(batch) == BATCH_SIZE:
@@ -113,7 +114,7 @@ class SVMModel(Model):
                         batch = []
                     uncached += 1
                 else:
-                    feature_queue.put((object_id, payload))
+                    feature_queue.put((object_id, attributes, payload))
                     cached += 1
 
             if len(batch) > 0:
@@ -128,6 +129,7 @@ class SVMModel(Model):
         queue_finished = False
         while not queue_finished:
             object_ids = []
+            attributes = []
             features = []
 
             item = feature_queue.get()
@@ -135,7 +137,8 @@ class SVMModel(Model):
                 break
 
             object_ids.append(item[0])
-            features.append(item[1])
+            attributes.append(item[1])
+            features.append(item[2])
 
             while True:
                 try:
@@ -145,7 +148,8 @@ class SVMModel(Model):
                         break
 
                     object_ids.append(item[0])
-                    features.append(item[1])
+                    attributes.append(item[1])
+                    features.append(item[2])
                 except queue.Empty:
                     break
 
@@ -163,14 +167,15 @@ class SVMModel(Model):
                     score = scores[i]
                     label = '1' if score > 0 else '0'
 
-                yield InferResult(objectId=object_ids[i], label=label, score=score, modelVersion=self.version)
+                yield InferResult(objectId=object_ids[i], attributes=attributes[i], label=label, score=score,
+                                  modelVersion=self.version)
 
         logger.info('{} examples scored'.format(scored))
 
     # label, image, key -> label, vector
-    def _process_batch(self, items: List[Tuple[str, torch.Tensor, str]], feature_queue: queue.Queue) -> None:
-        keys = [i[2] for i in items]
-        tensor = torch.stack([i[1] for i in items])
+    def _process_batch(self, items: List[Tuple[str, Any, torch.Tensor, str]], feature_queue: queue.Queue) -> None:
+        keys = [i[3] for i in items]
+        tensor = torch.stack([i[2] for i in items])
         results = self._feature_provider.cache_and_get(keys, tensor, True)
         for item in items:
-            feature_queue.put((item[0], results[item[2]]))
+            feature_queue.put((item[0], item[1], results[item[3]]))

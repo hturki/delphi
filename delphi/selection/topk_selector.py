@@ -1,6 +1,7 @@
 import math
 import queue
-from typing import Iterator
+import threading
+from typing import Optional, Iterable
 
 from delphi.model import Model
 from delphi.proto.learning_module_pb2 import InferResult
@@ -19,29 +20,43 @@ class TopKSelector(Selector):
 
         self._priority_queues = [queue.PriorityQueue()]
         self._batch_added = 0
+        self._insert_lock = threading.Lock()
 
-        self._result_queue = queue.Queue()
+        self._result_queue = queue.Queue(maxsize=1000)
         self._result_iterator = to_iter(self._result_queue)
+        self._model_present = False
 
     def add_result(self, result: InferResult) -> None:
-        self._priority_queues[-1].put((-result.score, result))
-        self._batch_added += 1
-        if self._batch_added == self._batch_size:
-            for _ in range(self._k):
-                self._result_queue.put(self._priority_queues[-1].get()[1])
-            self._batch_added = 0
+        with self._insert_lock:
+            if not self._model_present:
+                self._result_queue.put(result)
+            else:
+                self._priority_queues[-1].put((-result.score, result.objectId, result))
+                self._batch_added += 1
+                if self._batch_added == self._batch_size:
+                    for _ in range(self._k):
+                        self._result_queue.put(self._priority_queues[-1].get()[-1])
+                    self._batch_added = 0
 
     def finish(self) -> None:
         self._result_queue.put(None)
 
-    def get_results(self) -> Iterator[InferResult]:
+    def get_results(self) -> Iterable[InferResult]:
         yield from self._result_iterator
 
-    def new_model(self, model: Model) -> None:
-        # add fractional batch before possibly discarding results in old queue
-        for _ in range(math.ceil(float(self._k) * self._batch_added / self._batch_size)):
-            self._result_queue.put(self._priority_queues[-1].get()[1])
+    def new_model(self, model: Optional[Model]) -> None:
+        with self._insert_lock:
+            self._model_present = model is not None
 
-        self._priority_queues.append(queue.PriorityQueue())
-        self._reexamination_strategy.reexamine(model, self._priority_queues)
-        self._batch_added = 0
+            if self._model_present:
+                # add fractional batch before possibly discarding results in old queue
+                for _ in range(math.ceil(float(self._k) * self._batch_added / self._batch_size)):
+                    self._result_queue.put(self._priority_queues[-1].get()[1])
+
+                self._priority_queues.append(queue.PriorityQueue())
+                self._reexamination_strategy.reexamine(model, self._priority_queues)
+            else:
+                # this is a reset, discard everything
+                self._priority_queues = [queue.PriorityQueue()]
+
+            self._batch_added = 0

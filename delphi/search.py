@@ -7,7 +7,7 @@ import time
 import zipfile
 from collections import defaultdict
 from pathlib import Path
-from typing import Dict, List, Optional, Iterator, Tuple
+from typing import Dict, List, Optional, Iterable, Tuple
 
 import numpy as np
 import tensorboard
@@ -69,6 +69,8 @@ class Search(DataManagerContext, ModelTrainerContext):
         self._staged_models: Dict[int, Model] = {}
         self._staged_model_condition = mp.Condition()
 
+        self._abort_event = threading.Event()
+
         # Indicates that the search will seed the strategy with an initial set of examples. The strategy should
         # therefore hold off on returning inference results until its underlying model is trained
         self._has_initial_examples = False
@@ -76,7 +78,7 @@ class Search(DataManagerContext, ModelTrainerContext):
         if self._node_index == 0:
             threading.Thread(target=self._train_thread, name='train-model').start()
 
-    def infer(self, requests: Iterator[DelphiObject]) -> Iterator[InferResult]:
+    def infer(self, requests: Iterable[DelphiObject]) -> Iterable[InferResult]:
         with self._model_lock:
             model = self._model
 
@@ -87,17 +89,18 @@ class Search(DataManagerContext, ModelTrainerContext):
             else:
                 # Pass all examples until user has labeled enough examples to train a model
                 for request in requests:
-                    yield InferResult(label='1', objectId=request.objectId)
+                    yield InferResult(label='1', objectId=request.objectId, attributes=request.attributes)
+                return
 
         with self._model_lock:
             model = self._model
 
         yield from model.infer(requests)
 
-    def add_labeled_examples(self, examples: Iterator[LabeledExample]) -> None:
+    def add_labeled_examples(self, examples: Iterable[LabeledExample]) -> None:
         self._data_manager.add_labeled_examples(examples)
 
-    def get_examples(self, example_set: ExampleSet, node_index: int) -> Iterator[ExampleMetadata]:
+    def get_examples(self, example_set: ExampleSet, node_index: int) -> Iterable[ExampleMetadata]:
         return self._data_manager.get_example_stream(example_set, node_index)
 
     def get_example(self, example_set: ExampleSet, label: str, example: str) -> Path:
@@ -153,7 +156,7 @@ class Search(DataManagerContext, ModelTrainerContext):
         threading.Thread(target=self._validate_test_results_thread, args=(model_version,),
                          name='validate-test_results').start()
 
-    def submit_test_results(self, results: Iterator[TestResult]) -> None:
+    def submit_test_results(self, results: Iterable[TestResult]) -> None:
         assert self._node_index == 0
         model_results = defaultdict(list)
         for result in results:
@@ -177,6 +180,8 @@ class Search(DataManagerContext, ModelTrainerContext):
             should_notify = self._model is None
             self._model = model
             self._last_trained_version = model_version
+
+        self.selector.new_model(model)
 
         if should_notify:
             self._initial_model_event.set()
@@ -202,6 +207,8 @@ class Search(DataManagerContext, ModelTrainerContext):
             self._model = None
             self._model_stats = ModelStatistics(version=-1)
             self._last_trained_version = -1
+
+        self.selector.new_model(None)
 
     def get_last_trained_version(self) -> int:
         with self._model_lock:
@@ -251,11 +258,14 @@ class Search(DataManagerContext, ModelTrainerContext):
             self._retrain_policy.reset()
             self._model_event.set()
 
-    def start(self, examples: Iterator[LabeledExample]):
-        threading.Thread(target=self._retriever_thread, args=(examples), name='get-objects').start()
+    def start(self, examples: Iterable[LabeledExample]):
+        threading.Thread(target=self._retriever_thread, args=(examples,), name='get-objects').start()
+
+    def stop(self) -> None:
+        self._abort_event.set()
 
     @log_exceptions
-    def _retriever_thread(self, examples: Iterator[LabeledExample]):
+    def _retriever_thread(self, examples: Iterable[LabeledExample]) -> None:
         try:
             self.retriever.start()
             peekable_examples = peekable(examples)
@@ -266,13 +276,16 @@ class Search(DataManagerContext, ModelTrainerContext):
                 self._initial_model_event.set()
 
             for result in self.infer(self.retriever.get_objects()):
+                logger.info(result.objectId)
                 self.selector.add_result(result)
+                if self._abort_event.is_set():
+                    return
         finally:
             self.retriever.stop()
             self.selector.finish()
 
     @log_exceptions
-    def _train_thread(self):
+    def _train_thread(self) -> None:
         while True:
             try:
                 self._model_event.wait()
@@ -282,7 +295,7 @@ class Search(DataManagerContext, ModelTrainerContext):
             except Exception as e:
                 logger.exception(e)
 
-    def _train_model(self):
+    def _train_model(self) -> None:
         assert self._node_index == 0
         logger.info('Training Model')
         train_start = time.time()
@@ -379,6 +392,8 @@ class Search(DataManagerContext, ModelTrainerContext):
                     node.internal.DiscardModel(DiscardModelRequest(searchId=self._id, version=model.version))
                     logger.info('Discarded model version {} on node {}'.format(model.version, node.url))
         else:
+            self.selector.new_model(model)
+
             if should_notify:
                 self._initial_model_event.set()
 
@@ -388,7 +403,7 @@ class Search(DataManagerContext, ModelTrainerContext):
                     logger.info('Promoted model on node {} to version {}'.format(node.url, model.version))
 
     @log_exceptions
-    def _train_model_slave_thread(self, trainer_index: int):
+    def _train_model_slave_thread(self, trainer_index: int) -> None:
         logger.info('Executing train request')
 
         with self._data_manager.get_examples(ExampleSet.TRAIN) as train_dir:
@@ -402,7 +417,7 @@ class Search(DataManagerContext, ModelTrainerContext):
                 self._staged_model_condition.notify_all()
 
     @log_exceptions
-    def _validate_test_results_thread(self, model_version: int):
+    def _validate_test_results_thread(self, model_version: int) -> None:
         logger.info('Executing validation request')
 
         model = self._get_staging_model(model_version)
@@ -435,7 +450,7 @@ class Search(DataManagerContext, ModelTrainerContext):
                 self._staged_model_condition.wait()
         return model
 
-    def _start_tensorboard(self):
+    def _start_tensorboard(self) -> None:
         tb = tensorboard.program.TensorBoard()
         tb_port = self._port + 1
         for i in range(10):
