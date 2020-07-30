@@ -1,7 +1,7 @@
 import multiprocessing as mp
 from abc import abstractmethod
 from pathlib import Path
-from typing import List, Callable, Iterable, Tuple, Any
+from typing import List, Callable, Iterable, Tuple
 
 import torch
 import torchvision.transforms as transforms
@@ -9,12 +9,13 @@ from torch.utils.data import DataLoader
 from torchvision import datasets
 
 from delphi.model import Model
-from delphi.proto.learning_module_pb2 import InferResult, DelphiObject
+from delphi.object_provider import ObjectProvider
+from delphi.provider_and_result import ProviderAndResult
 from delphi.pytorch.pytorch_trainer_base import get_test_transforms
 
 
-def preprocess(request: DelphiObject) -> Tuple[str, Any, torch.Tensor]:
-    return request.objectId, request.attributes, get_test_transforms()(request.content)
+def preprocess(request: ObjectProvider) -> Tuple[ObjectProvider, torch.Tensor]:
+    return request, get_test_transforms()(request.get_content())
 
 
 class PytorchModelBase(Model):
@@ -35,7 +36,7 @@ class PytorchModelBase(Model):
     def version(self) -> int:
         return self._version
 
-    def infer(self, requests: Iterable[DelphiObject]) -> Iterable[InferResult]:
+    def infer(self, requests: Iterable[ObjectProvider]) -> Iterable[ProviderAndResult]:
         batch = []
         items = self._pool.imap_unordered(preprocess, requests)
 
@@ -63,10 +64,9 @@ class PytorchModelBase(Model):
     def scores_are_probabilities(self) -> bool:
         return True
 
-    def _process_batch(self, batch: List[Tuple[str, Any, torch.Tensor]]) -> Iterable[InferResult]:
-        tensors = torch.stack([f[2] for f in batch]).to(self._device, non_blocking=True)
+    def _process_batch(self, batch: List[Tuple[ObjectProvider, torch.Tensor]]) -> Iterable[ProviderAndResult]:
+        tensors = torch.stack([f[1] for f in batch]).to(self._device, non_blocking=True)
         predictions = self.get_predictions(tensors)
         for i in range(len(batch)):
             score = predictions[i]
-            yield InferResult(objectId=batch[i][0], attributes=batch[i][1], label='1' if score >= 0.5 else '0',
-                              score=score, modelVersion=self.version)
+            yield ProviderAndResult(batch[i][0], '1' if score >= 0.5 else '0', score, self.version)

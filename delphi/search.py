@@ -24,10 +24,12 @@ from delphi.data_manager import DataManager
 from delphi.learning_module_stub import LearningModuleStub
 from delphi.model import Model
 from delphi.model_trainer import ModelTrainer, TrainingStyle
+from delphi.object_provider import ObjectProvider
 from delphi.proto.internal_pb2 import ExampleMetadata, TestResult, StageModelRequest, TrainModelRequest, \
     DiscardModelRequest, PromoteModelRequest, SubmitTestRequest, ValidateTestResultsRequest
-from delphi.proto.learning_module_pb2 import ModelStatistics, ModelMetrics, ModelArchive, InferResult, \
-    SearchId, LabeledExample, ExampleSet, DelphiObject
+from delphi.proto.learning_module_pb2 import ModelStatistics, ModelMetrics, ModelArchive, SearchId, LabeledExample, \
+    ExampleSet
+from delphi.provider_and_result import ProviderAndResult
 from delphi.retrain.retrain_policy import RetrainPolicy
 from delphi.retrieval.retriever import Retriever
 from delphi.selection.selector import Selector
@@ -78,7 +80,7 @@ class Search(DataManagerContext, ModelTrainerContext):
         if self._node_index == 0:
             threading.Thread(target=self._train_thread, name='train-model').start()
 
-    def infer(self, requests: Iterable[DelphiObject]) -> Iterable[InferResult]:
+    def infer(self, requests: Iterable[ObjectProvider]) -> Iterable[ProviderAndResult]:
         with self._model_lock:
             model = self._model
 
@@ -89,7 +91,7 @@ class Search(DataManagerContext, ModelTrainerContext):
             else:
                 # Pass all examples until user has labeled enough examples to train a model
                 for request in requests:
-                    yield InferResult(label='1', objectId=request.objectId, attributes=request.attributes)
+                    yield ProviderAndResult(request, '1', None, None)
                 return
 
         with self._model_lock:
@@ -276,7 +278,7 @@ class Search(DataManagerContext, ModelTrainerContext):
                 self._initial_model_event.set()
 
             for result in self.infer(self.retriever.get_objects()):
-                logger.info(result.objectId)
+                logger.info(result.provider.id)
                 self.selector.add_result(result)
                 if self._abort_event.is_set():
                     return

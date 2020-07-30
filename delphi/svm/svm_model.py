@@ -12,15 +12,17 @@ from sklearn.ensemble import VotingClassifier
 from sklearn.svm import LinearSVC, SVC
 
 from delphi.model import Model
-from delphi.proto.learning_module_pb2 import InferResult, DelphiObject
+from delphi.object_provider import ObjectProvider
+from delphi.provider_and_result import ProviderAndResult
+from delphi.simple_object_provider import SimpleObjectProvider
 from delphi.svm.feature_provider import FeatureProvider, BATCH_SIZE, get_worker_feature_provider, \
     set_worker_feature_provider
 from delphi.utils import log_exceptions
 
 
-# return object_id, empty map, whether to preprocess, vector or (image, key)
+# return object_provider, whether to preprocess, vector or (image, key)
 @log_exceptions
-def load_from_path(image_path: Path) -> Tuple[str, Any, bool, Union[List[float], Any]]:
+def load_from_path(image_path: Path) -> Tuple[ObjectProvider, bool, Union[List[float], Any]]:
     split = image_path.parts
     label = split[-2]
     name = split[-1]
@@ -28,25 +30,26 @@ def load_from_path(image_path: Path) -> Tuple[str, Any, bool, Union[List[float],
 
     key = get_worker_feature_provider().get_result_key_name(name)
     cached_vector = get_worker_feature_provider().get_cached_vector(key)
+    provider = SimpleObjectProvider(object_id, b'', {})
     if cached_vector is not None:
-        return object_id, {}, False, cached_vector
+        return provider, False, cached_vector
     else:
         with image_path.open('rb') as f:
             content = f.read()
 
-        return object_id, {}, True, (get_worker_feature_provider().preprocess(content).numpy(), key)
+        return provider, True, (get_worker_feature_provider().preprocess(content).numpy(), key)
 
 
-# return object_id, attributes, whether to preprocess, vector or (image, key)
+# return object_provider, whether to preprocess, vector or (image, key)
 @log_exceptions
-def load_from_content(request: DelphiObject) -> Tuple[str, Any, bool, Union[List[float], Any]]:
-    key = get_worker_feature_provider().get_result_key_content(request.content)
+def load_from_content(request: ObjectProvider) -> Tuple[ObjectProvider, bool, Union[List[float], Any]]:
+    content = request.get_content()
+    key = get_worker_feature_provider().get_result_key_content(content)
     cached_vector = get_worker_feature_provider().get_cached_vector(key)
     if cached_vector is not None:
-        return request.objectId, request.attributes, False, cached_vector
+        return request, False, cached_vector
     else:
-        return request.objectId, request.attributes, True, \
-               (get_worker_feature_provider().preprocess(request.content).numpy(), key)
+        return request, True, (get_worker_feature_provider().preprocess(content).numpy(), key)
 
 
 class SVMModel(Model):
@@ -64,7 +67,7 @@ class SVMModel(Model):
     def version(self) -> int:
         return self._version
 
-    def infer(self, requests: Iterable[DelphiObject]) -> Iterable[InferResult]:
+    def infer(self, requests: Iterable[ObjectProvider]) -> Iterable[ProviderAndResult]:
         with mp.Pool(min(16, mp.cpu_count()), initializer=set_worker_feature_provider,
                      initargs=(self._feature_provider.feature_extractor,
                                self._feature_provider.cache)) as pool:
@@ -83,7 +86,7 @@ class SVMModel(Model):
             for result in results:
                 i += 1
                 # TODO(hturki): Should we get the target label in a less hacky way?
-                callback_fn(int(result.objectId.split('/')[-2]), result.score)
+                callback_fn(int(result.provider.id.split('/')[-2]), result.score)
                 if i % 1000 == 0:
                     logger.info('{} examples scored so far'.format(i))
 
@@ -94,7 +97,8 @@ class SVMModel(Model):
     def scores_are_probabilities(self) -> bool:
         return self._probability
 
-    def _infer_inner(self, images: Iterable[Tuple[str, Any, bool, Union[List[float], Any]]]) -> Iterable[InferResult]:
+    def _infer_inner(self, images: Iterable[Tuple[ObjectProvider, bool, Union[List[float], Any]]]) \
+            -> Iterable[ProviderAndResult]:
         feature_queue = queue.Queue()
 
         @log_exceptions
@@ -102,11 +106,10 @@ class SVMModel(Model):
             cached = 0
             uncached = 0
             batch = []
-            for object_id, attributes, should_process, payload in images:
+            for provider, should_process, payload in images:
                 if should_process:
                     image, key = payload
-                    batch.append((object_id,
-                                  attributes,
+                    batch.append((provider,
                                   torch.from_numpy(image).to(self._feature_provider.device, non_blocking=True),
                                   key))
                     if len(batch) == BATCH_SIZE:
@@ -114,7 +117,7 @@ class SVMModel(Model):
                         batch = []
                     uncached += 1
                 else:
-                    feature_queue.put((object_id, attributes, payload))
+                    feature_queue.put((provider, payload))
                     cached += 1
 
             if len(batch) > 0:
@@ -128,17 +131,15 @@ class SVMModel(Model):
         scored = 0
         queue_finished = False
         while not queue_finished:
-            object_ids = []
-            attributes = []
+            providers = []
             features = []
 
             item = feature_queue.get()
             if item is None:
                 break
 
-            object_ids.append(item[0])
-            attributes.append(item[1])
-            features.append(item[2])
+            providers.append(item[0])
+            features.append(item[1])
 
             while True:
                 try:
@@ -147,9 +148,8 @@ class SVMModel(Model):
                         queue_finished = True
                         break
 
-                    object_ids.append(item[0])
-                    attributes.append(item[1])
-                    features.append(item[2])
+                    providers.append(item[0])
+                    features.append(item[1])
                 except queue.Empty:
                     break
 
@@ -158,8 +158,8 @@ class SVMModel(Model):
 
             scores = self._svc.predict_proba(features) if self._probability else self._svc.decision_function(
                 features)
-            scored += len(object_ids)
-            for i in range(len(object_ids)):
+            scored += len(providers)
+            for i in range(len(providers)):
                 if self._probability:
                     score = scores[i][1]
                     label = '1' if score >= 0.5 else '0'
@@ -167,15 +167,14 @@ class SVMModel(Model):
                     score = scores[i]
                     label = '1' if score > 0 else '0'
 
-                yield InferResult(objectId=object_ids[i], attributes=attributes[i], label=label, score=score,
-                                  modelVersion=self.version)
+                yield ProviderAndResult(providers[i], label, score, self.version)
 
         logger.info('{} examples scored'.format(scored))
 
-    # label, image, key -> label, vector
-    def _process_batch(self, items: List[Tuple[str, Any, torch.Tensor, str]], feature_queue: queue.Queue) -> None:
-        keys = [i[3] for i in items]
-        tensor = torch.stack([i[2] for i in items])
+    # provider, image, key -> provider, vector
+    def _process_batch(self, items: List[Tuple[ObjectProvider, torch.Tensor, str]], feature_queue: queue.Queue) -> None:
+        keys = [i[2] for i in items]
+        tensor = torch.stack([i[1] for i in items])
         results = self._feature_provider.cache_and_get(keys, tensor, True)
         for item in items:
-            feature_queue.put((item[0], item[1], results[item[3]]))
+            feature_queue.put((item[0], results[item[2]]))

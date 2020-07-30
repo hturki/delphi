@@ -2,7 +2,8 @@ from abc import ABCMeta, abstractmethod
 from pathlib import Path
 from typing import Callable, Iterable
 
-from delphi.proto.learning_module_pb2 import InferResult, DelphiObject
+from delphi.object_provider import ObjectProvider
+from delphi.provider_and_result import ProviderAndResult
 
 
 class Model(metaclass=ABCMeta):
@@ -13,7 +14,7 @@ class Model(metaclass=ABCMeta):
         pass
 
     @abstractmethod
-    def infer(self, requests: Iterable[DelphiObject]) -> Iterable[InferResult]:
+    def infer(self, requests: Iterable[ObjectProvider]) -> Iterable[ProviderAndResult]:
         pass
 
     @abstractmethod

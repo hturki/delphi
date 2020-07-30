@@ -33,6 +33,7 @@ from delphi.selection.reexamination_strategy import ReexaminationStrategy
 from delphi.selection.selector import Selector
 from delphi.selection.top_reexamination_strategy import TopReexaminationStrategy
 from delphi.selection.topk_selector import TopKSelector
+from delphi.simple_object_provider import SimpleObjectProvider
 from delphi.svm.distributed_svm_trainer import DistributedSVMTrainer
 from delphi.svm.ensemble_svm_trainer import EnsembleSVMTrainer
 from delphi.svm.feature_cache import FeatureCache
@@ -102,7 +103,9 @@ class LearningModuleServicer(LearningModuleServiceServicer):
 
     @log_exceptions_and_abort
     def GetResults(self, request: SearchId, context: grpc.ServicerContext) -> Iterable[InferResult]:
-        yield from self._manager.get_search(request).selector.get_results()
+        for result in self._manager.get_search(request).selector.get_results():
+            yield InferResult(objectId=result.provider.id, label=result.label, score=result.score,
+                              modelVersion=result.model_version, attributes=result.provider.get_attributes())
 
     @log_exceptions_and_abort
     def GetObjects(self, request: GetObjectsRequest, context: grpc.ServicerContext) -> Iterable[DelphiObject]:
@@ -113,7 +116,10 @@ class LearningModuleServicer(LearningModuleServiceServicer):
     @log_exceptions_and_abort
     def Infer(self, request: Iterable[InferRequest], context: grpc.ServicerContext) -> Iterable[InferResult]:
         search_id = next(request).searchId
-        yield from self._manager.get_search(search_id).infer(x.object for x in request)
+        for result in self._manager.get_search(search_id).infer(
+                SimpleObjectProvider(x.object.objectId, x.object.content, x.object.attributes) for x in request):
+            yield InferResult(objectId=result.provider.id, label=result.label, score=result.score,
+                              modelVersion=result.model_version, attributes=result.provider.get_attributes())
 
     @log_exceptions_and_abort
     def AddLabeledExamples(self, request: Iterable[LabeledExampleRequest], context: grpc.ServicerContext) -> Empty:
