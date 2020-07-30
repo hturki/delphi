@@ -1,20 +1,33 @@
-from typing import Iterable
+import io
+from pathlib import Path
+from typing import Iterable, Sized
 
 from logzero import logger
+from opendiamond.attributes import StringAttributeCodec
 from opendiamond.client.search import DiamondSearch
+from opendiamond.config import DiamondConfig
 from opendiamond.protocol import XDR_reexecute
-from opendiamond.server.object_ import ATTR_OBJ_ID, ATTR_DATA
+from opendiamond.server.object_ import ATTR_OBJ_ID, ATTR_DATA, ATTR_DEVICE_NAME
 
 from delphi.object_provider import ObjectProvider
 from delphi.proto.learning_module_pb2 import DelphiObject
+from delphi.retrieval.diamond_attribute_provider import DiamondAttributeProvider
 from delphi.retrieval.retriever import Retriever
-from delphi.simple_object_provider import SimpleObjectProvider
+
+STRING_CODEC = StringAttributeCodec()
 
 
 class DiamondRetriever(Retriever):
 
     def __init__(self, search: DiamondSearch):
         self._search = search
+
+        try:
+            self._diamond_config = DiamondConfig()
+        except Exception as e:
+            logger.info('No local diamond config found')
+            logger.exception(e)
+            self._diamond_config = None
 
     def start(self) -> None:
         self._search.start()
@@ -24,20 +37,31 @@ class DiamondRetriever(Retriever):
 
     def get_objects(self) -> Iterable[ObjectProvider]:
         for result in self._search.results:
-            logger.info('data: {}'.format(len(result[ATTR_DATA])))
             content = result[ATTR_DATA]
             del result[ATTR_DATA]
-            object_id = result[ATTR_OBJ_ID].decode().strip('\0 ')
-            yield SimpleObjectProvider(object_id, content, result)
+            object_id = STRING_CODEC.decode(result[ATTR_OBJ_ID])
 
-    def get_object(self, object_id: str, attributes: Iterable[str]) -> DelphiObject:
-        conn = self._search._connections[0]  # Each Delphi server should be connected to only one Diamond server
-        conn.connect()
-        conn.setup(next(iter(self._search._cookie_map.values())), self._search._filters)
+            if self._diamond_config is not None \
+                    and STRING_CODEC.decode(result[ATTR_DEVICE_NAME]) in self._diamond_config.serverids \
+                    and object_id.startswith('http://localhost'):
+                image_provider = Path(self._diamond_config.dataroot) / object_id.split('/collection/id/')[1]
+            else:
+                image_provider = io.BytesIO(content)
 
-        # Send reexecute request
-        request = XDR_reexecute(object_id=object_id, attrs=attributes)
-        reply = conn.control.reexecute_filters(request)
+            yield ObjectProvider(object_id, content, DiamondAttributeProvider(result, image_provider))
+
+    def get_object(self, object_id: str, attributes: Sized) -> DelphiObject:
+        # Each Delphi server should be connected to only one Diamond server
+        conn = next(iter(self._search._connections.values()))
+        try:
+            conn.connect()
+            conn.setup(next(iter(self._search._cookie_map.values())), self._search._filters)
+
+            # Send reexecute request
+            request = XDR_reexecute(object_id=object_id, attrs=attributes if len(attributes) > 1 else None)
+            reply = conn.control.reexecute_filters(request)
+        finally:
+            conn.close()
 
         # Return object attributes
         dct = dict((attr.name, attr.value) for attr in reply.attrs)

@@ -2,13 +2,13 @@ from abc import ABCMeta, abstractmethod
 from typing import Iterable, Optional
 
 from delphi.model import Model
-from delphi.provider_and_result import ProviderAndResult
+from delphi.result_provider import ResultProvider
 
 
 class Selector(metaclass=ABCMeta):
 
     @abstractmethod
-    def add_result(self, result: ProviderAndResult) -> None:
+    def add_result(self, result: ResultProvider) -> None:
         pass
 
     @abstractmethod
@@ -16,7 +16,7 @@ class Selector(metaclass=ABCMeta):
         pass
 
     @abstractmethod
-    def get_results(self) -> Iterable[ProviderAndResult]:
+    def get_results(self) -> Iterable[ResultProvider]:
         pass
 
     @abstractmethod

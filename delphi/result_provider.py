@@ -1,0 +1,14 @@
+from typing import Optional
+
+from delphi.attribute_provider import AttributeProvider
+
+
+class ResultProvider(object):
+
+    def __init__(self, id: str, label: str, score: Optional[float], model_version: Optional[int],
+                 attributes: AttributeProvider):
+        self.id = id
+        self.label = label
+        self.score = score
+        self.model_version = model_version
+        self.attributes = attributes

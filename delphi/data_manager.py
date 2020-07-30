@@ -155,7 +155,7 @@ class DataManager(object):
             for dir in self._staging_dir.iterdir():
                 for label in dir.iterdir():
                     if label.name != IGNORE_FILE:
-                        old_dirs.extend(label)
+                        old_dirs.append(label)
 
             for example in examples:
                 example_file = get_example_key(example.content)

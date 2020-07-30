@@ -3,7 +3,7 @@ from pathlib import Path
 from typing import Callable, Iterable
 
 from delphi.object_provider import ObjectProvider
-from delphi.provider_and_result import ProviderAndResult
+from delphi.result_provider import ResultProvider
 
 
 class Model(metaclass=ABCMeta):
@@ -14,7 +14,7 @@ class Model(metaclass=ABCMeta):
         pass
 
     @abstractmethod
-    def infer(self, requests: Iterable[ObjectProvider]) -> Iterable[ProviderAndResult]:
+    def infer(self, requests: Iterable[ObjectProvider]) -> Iterable[ResultProvider]:
         pass
 
     @abstractmethod

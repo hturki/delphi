@@ -13,8 +13,8 @@ from sklearn.svm import LinearSVC, SVC
 
 from delphi.model import Model
 from delphi.object_provider import ObjectProvider
-from delphi.provider_and_result import ProviderAndResult
-from delphi.simple_object_provider import SimpleObjectProvider
+from delphi.result_provider import ResultProvider
+from delphi.simple_attribute_provider import SimpleAttributeProvider
 from delphi.svm.feature_provider import FeatureProvider, BATCH_SIZE, get_worker_feature_provider, \
     set_worker_feature_provider
 from delphi.utils import log_exceptions
@@ -30,7 +30,7 @@ def load_from_path(image_path: Path) -> Tuple[ObjectProvider, bool, Union[List[f
 
     key = get_worker_feature_provider().get_result_key_name(name)
     cached_vector = get_worker_feature_provider().get_cached_vector(key)
-    provider = SimpleObjectProvider(object_id, b'', {})
+    provider = ObjectProvider(object_id, b'', SimpleAttributeProvider({}))
     if cached_vector is not None:
         return provider, False, cached_vector
     else:
@@ -43,7 +43,7 @@ def load_from_path(image_path: Path) -> Tuple[ObjectProvider, bool, Union[List[f
 # return object_provider, whether to preprocess, vector or (image, key)
 @log_exceptions
 def load_from_content(request: ObjectProvider) -> Tuple[ObjectProvider, bool, Union[List[float], Any]]:
-    content = request.get_content()
+    content = request.content
     key = get_worker_feature_provider().get_result_key_content(content)
     cached_vector = get_worker_feature_provider().get_cached_vector(key)
     if cached_vector is not None:
@@ -67,7 +67,7 @@ class SVMModel(Model):
     def version(self) -> int:
         return self._version
 
-    def infer(self, requests: Iterable[ObjectProvider]) -> Iterable[ProviderAndResult]:
+    def infer(self, requests: Iterable[ObjectProvider]) -> Iterable[ResultProvider]:
         with mp.Pool(min(16, mp.cpu_count()), initializer=set_worker_feature_provider,
                      initargs=(self._feature_provider.feature_extractor,
                                self._feature_provider.cache)) as pool:
@@ -86,7 +86,7 @@ class SVMModel(Model):
             for result in results:
                 i += 1
                 # TODO(hturki): Should we get the target label in a less hacky way?
-                callback_fn(int(result.provider.id.split('/')[-2]), result.score)
+                callback_fn(int(result.id.split('/')[-2]), result.score)
                 if i % 1000 == 0:
                     logger.info('{} examples scored so far'.format(i))
 
@@ -98,7 +98,7 @@ class SVMModel(Model):
         return self._probability
 
     def _infer_inner(self, images: Iterable[Tuple[ObjectProvider, bool, Union[List[float], Any]]]) \
-            -> Iterable[ProviderAndResult]:
+            -> Iterable[ResultProvider]:
         feature_queue = queue.Queue()
 
         @log_exceptions
@@ -167,7 +167,7 @@ class SVMModel(Model):
                     score = scores[i]
                     label = '1' if score > 0 else '0'
 
-                yield ProviderAndResult(providers[i], label, score, self.version)
+                yield ResultProvider(providers[i].id, label, score, self.version, providers[i].attributes)
 
         logger.info('{} examples scored'.format(scored))
 

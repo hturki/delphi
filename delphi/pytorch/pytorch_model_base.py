@@ -10,12 +10,12 @@ from torchvision import datasets
 
 from delphi.model import Model
 from delphi.object_provider import ObjectProvider
-from delphi.provider_and_result import ProviderAndResult
+from delphi.result_provider import ResultProvider
 from delphi.pytorch.pytorch_trainer_base import get_test_transforms
 
 
 def preprocess(request: ObjectProvider) -> Tuple[ObjectProvider, torch.Tensor]:
-    return request, get_test_transforms()(request.get_content())
+    return request, get_test_transforms()(request.content)
 
 
 class PytorchModelBase(Model):
@@ -36,7 +36,7 @@ class PytorchModelBase(Model):
     def version(self) -> int:
         return self._version
 
-    def infer(self, requests: Iterable[ObjectProvider]) -> Iterable[ProviderAndResult]:
+    def infer(self, requests: Iterable[ObjectProvider]) -> Iterable[ResultProvider]:
         batch = []
         items = self._pool.imap_unordered(preprocess, requests)
 
@@ -64,9 +64,10 @@ class PytorchModelBase(Model):
     def scores_are_probabilities(self) -> bool:
         return True
 
-    def _process_batch(self, batch: List[Tuple[ObjectProvider, torch.Tensor]]) -> Iterable[ProviderAndResult]:
+    def _process_batch(self, batch: List[Tuple[ObjectProvider, torch.Tensor]]) -> Iterable[ResultProvider]:
         tensors = torch.stack([f[1] for f in batch]).to(self._device, non_blocking=True)
         predictions = self.get_predictions(tensors)
         for i in range(len(batch)):
             score = predictions[i]
-            yield ProviderAndResult(batch[i][0], '1' if score >= 0.5 else '0', score, self.version)
+            yield ResultProvider(batch[i][0].id, '1' if score >= 0.5 else '0', score, self.version,
+                                 batch[i][0].attributes)

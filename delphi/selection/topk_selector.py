@@ -4,7 +4,7 @@ import threading
 from typing import Optional, Iterable
 
 from delphi.model import Model
-from delphi.provider_and_result import ProviderAndResult
+from delphi.result_provider import ResultProvider
 from delphi.selection.reexamination_strategy import ReexaminationStrategy
 from delphi.selection.selector import Selector
 from delphi.utils import to_iter
@@ -22,16 +22,16 @@ class TopKSelector(Selector):
         self._batch_added = 0
         self._insert_lock = threading.Lock()
 
-        self._result_queue = queue.Queue(maxsize=1000)
+        self._result_queue = queue.Queue(maxsize=500)
         self._result_iterator = to_iter(self._result_queue)
         self._model_present = False
 
-    def add_result(self, result: ProviderAndResult) -> None:
+    def add_result(self, result: ResultProvider) -> None:
         with self._insert_lock:
             if not self._model_present:
                 self._result_queue.put(result)
             else:
-                self._priority_queues[-1].put((-result.score, result.provider.id, result))
+                self._priority_queues[-1].put((-result.score, result.id, result))
                 self._batch_added += 1
                 if self._batch_added == self._batch_size:
                     for _ in range(self._k):
@@ -41,7 +41,7 @@ class TopKSelector(Selector):
     def finish(self) -> None:
         self._result_queue.put(None)
 
-    def get_results(self) -> Iterable[ProviderAndResult]:
+    def get_results(self) -> Iterable[ResultProvider]:
         yield from self._result_iterator
 
     def new_model(self, model: Optional[Model]) -> None:

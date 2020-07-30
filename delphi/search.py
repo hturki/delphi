@@ -29,7 +29,7 @@ from delphi.proto.internal_pb2 import ExampleMetadata, TestResult, StageModelReq
     DiscardModelRequest, PromoteModelRequest, SubmitTestRequest, ValidateTestResultsRequest
 from delphi.proto.learning_module_pb2 import ModelStatistics, ModelMetrics, ModelArchive, SearchId, LabeledExample, \
     ExampleSet
-from delphi.provider_and_result import ProviderAndResult
+from delphi.result_provider import ResultProvider
 from delphi.retrain.retrain_policy import RetrainPolicy
 from delphi.retrieval.retriever import Retriever
 from delphi.selection.selector import Selector
@@ -80,7 +80,7 @@ class Search(DataManagerContext, ModelTrainerContext):
         if self._node_index == 0:
             threading.Thread(target=self._train_thread, name='train-model').start()
 
-    def infer(self, requests: Iterable[ObjectProvider]) -> Iterable[ProviderAndResult]:
+    def infer(self, requests: Iterable[ObjectProvider]) -> Iterable[ResultProvider]:
         with self._model_lock:
             model = self._model
 
@@ -91,7 +91,7 @@ class Search(DataManagerContext, ModelTrainerContext):
             else:
                 # Pass all examples until user has labeled enough examples to train a model
                 for request in requests:
-                    yield ProviderAndResult(request, '1', None, None)
+                    yield ResultProvider(request.id, '1', None, None, request.attributes)
                 return
 
         with self._model_lock:
@@ -278,7 +278,6 @@ class Search(DataManagerContext, ModelTrainerContext):
                 self._initial_model_event.set()
 
             for result in self.infer(self.retriever.get_objects()):
-                logger.info(result.provider.id)
                 self.selector.add_result(result)
                 if self._abort_event.is_set():
                     return

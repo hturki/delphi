@@ -1,18 +1,9 @@
-from abc import ABCMeta, abstractmethod
-from typing import Mapping
+from delphi.attribute_provider import AttributeProvider
 
-# Must be picklable
-class ObjectProvider(metaclass=ABCMeta):
 
-    @property
-    @abstractmethod
-    def id(self) -> str:
-        pass
+class ObjectProvider(object):
 
-    @abstractmethod
-    def get_content(self) -> bytes:
-        pass
-
-    @abstractmethod
-    def get_attributes(self) -> Mapping[str, bytes]:
-        pass
+    def __init__(self, id: str, content: bytes, attributes: AttributeProvider):
+        self.id = id
+        self.content = content
+        self.attributes = attributes

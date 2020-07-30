@@ -1,4 +1,5 @@
 from abc import ABCMeta, abstractmethod
+from collections import Sized
 from typing import Iterable
 
 from delphi.object_provider import ObjectProvider
@@ -20,5 +21,5 @@ class Retriever(metaclass=ABCMeta):
         pass
 
     @abstractmethod
-    def get_object(self, object_id: str, attributes: Iterable[str]) -> DelphiObject:
+    def get_object(self, object_id: str, attributes: Sized) -> DelphiObject:
         pass

@@ -14,6 +14,7 @@ from delphi.condition.test_auc_condition import TestAucCondition
 from delphi.context.model_trainer_context import ModelTrainerContext
 from delphi.learning_module_stub import LearningModuleStub
 from delphi.mpncov.mpncov_trainer import MPNCovTrainer
+from delphi.object_provider import ObjectProvider
 from delphi.proto.learning_module_pb2 import InferRequest, InferResult, ModelStatistics, \
     ImportModelRequest, ModelArchive, LabeledExampleRequest, SearchId, \
     AddLabeledExampleIdsRequest, LabeledExample, DelphiObject, GetObjectsRequest
@@ -33,7 +34,7 @@ from delphi.selection.reexamination_strategy import ReexaminationStrategy
 from delphi.selection.selector import Selector
 from delphi.selection.top_reexamination_strategy import TopReexaminationStrategy
 from delphi.selection.topk_selector import TopKSelector
-from delphi.simple_object_provider import SimpleObjectProvider
+from delphi.simple_attribute_provider import SimpleAttributeProvider
 from delphi.svm.distributed_svm_trainer import DistributedSVMTrainer
 from delphi.svm.ensemble_svm_trainer import EnsembleSVMTrainer
 from delphi.svm.feature_cache import FeatureCache
@@ -97,6 +98,7 @@ class LearningModuleServicer(LearningModuleServiceServicer):
 
     @log_exceptions_and_abort
     def StopSearch(self, request: SearchId, context: grpc.ServicerContext) -> Empty:
+        logger.info('Stopping search with id {}'.format(request.value))
         search = self._manager.remove_search(request)
         search.stop()
         return Empty()
@@ -104,8 +106,8 @@ class LearningModuleServicer(LearningModuleServiceServicer):
     @log_exceptions_and_abort
     def GetResults(self, request: SearchId, context: grpc.ServicerContext) -> Iterable[InferResult]:
         for result in self._manager.get_search(request).selector.get_results():
-            yield InferResult(objectId=result.provider.id, label=result.label, score=result.score,
-                              modelVersion=result.model_version, attributes=result.provider.get_attributes())
+            yield InferResult(objectId=result.id, label=result.label, score=result.score,
+                              modelVersion=result.model_version, attributes=result.attributes.get())
 
     @log_exceptions_and_abort
     def GetObjects(self, request: GetObjectsRequest, context: grpc.ServicerContext) -> Iterable[DelphiObject]:
@@ -117,9 +119,10 @@ class LearningModuleServicer(LearningModuleServiceServicer):
     def Infer(self, request: Iterable[InferRequest], context: grpc.ServicerContext) -> Iterable[InferResult]:
         search_id = next(request).searchId
         for result in self._manager.get_search(search_id).infer(
-                SimpleObjectProvider(x.object.objectId, x.object.content, x.object.attributes) for x in request):
-            yield InferResult(objectId=result.provider.id, label=result.label, score=result.score,
-                              modelVersion=result.model_version, attributes=result.provider.get_attributes())
+                ObjectProvider(x.object.objectId, x.object.content, SimpleAttributeProvider(x.object.attributes)) for x
+                in request):
+            yield InferResult(objectId=result.id, label=result.label, score=result.score,
+                              modelVersion=result.model_version, attributes=result.attributes.get())
 
     @log_exceptions_and_abort
     def AddLabeledExamples(self, request: Iterable[LabeledExampleRequest], context: grpc.ServicerContext) -> Empty:
@@ -204,7 +207,7 @@ class LearningModuleServicer(LearningModuleServiceServicer):
             diamond_search = DiamondSearch([ScopeCookie.parse(x) for x in dataset.diamond.cookies],
                                            [FilterSpec(x.name, Blob(x.code), x.arguments, Blob(x.blob), x.dependencies,
                                                        x.minScore, x.maxScore) for x in dataset.diamond.filters],
-                                           dataset.diamond.attributes)
+                                           list(dataset.diamond.attributes) + [ATTR_DATA])
             return DiamondRetriever(diamond_search)
         else:
             raise NotImplementedError('unknown dataset: {}'.format(json_format.MessageToJson(dataset)))

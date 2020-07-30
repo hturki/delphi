@@ -20,4 +20,4 @@ class TopReexaminationStrategy(ReexaminationStrategy):
                     break
 
         for result in model.infer(to_reexamine):
-            queues[-1].put((-result.score, result.provider.id, result))
+            queues[-1].put((-result.score, result.id, result))
