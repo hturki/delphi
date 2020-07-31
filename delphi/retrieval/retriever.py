@@ -4,6 +4,7 @@ from typing import Iterable
 
 from delphi.object_provider import ObjectProvider
 from delphi.proto.learning_module_pb2 import DelphiObject
+from delphi.retrieval.retriever_stats import RetrieverStats
 
 
 class Retriever(metaclass=ABCMeta):
@@ -22,4 +23,8 @@ class Retriever(metaclass=ABCMeta):
 
     @abstractmethod
     def get_object(self, object_id: str, attributes: Sized) -> DelphiObject:
+        pass
+
+    @abstractmethod
+    def get_stats(self) -> RetrieverStats:
         pass

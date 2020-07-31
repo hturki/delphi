@@ -2,7 +2,7 @@ from typing import Dict, Optional
 
 from delphi.condition.model_condition import ModelCondition
 from delphi.model_trainer import ModelTrainer
-from delphi.proto.learning_module_pb2 import ModelStatistics
+from delphi.proto.learning_module_pb2 import ModelStats
 
 
 class TestAucCondition(ModelCondition):
@@ -12,7 +12,7 @@ class TestAucCondition(ModelCondition):
         self._threshold = threshold
         self._trainer = trainer
 
-    def is_satisfied(self, example_counts: Dict[str, int], last_statistics: Optional[ModelStatistics]) -> bool:
+    def is_satisfied(self, example_counts: Dict[str, int], last_statistics: Optional[ModelStats]) -> bool:
         return last_statistics.auc > self._threshold
 
     @property

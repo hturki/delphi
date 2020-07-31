@@ -4,7 +4,7 @@ from logzero import logger
 
 from delphi.condition.model_condition import ModelCondition
 from delphi.model_trainer import ModelTrainer
-from delphi.proto.learning_module_pb2 import ModelStatistics
+from delphi.proto.learning_module_pb2 import ModelStats
 
 
 class ExamplesPerLabelCondition(ModelCondition):
@@ -14,7 +14,7 @@ class ExamplesPerLabelCondition(ModelCondition):
         self._count = count
         self._trainer = trainer
 
-    def is_satisfied(self, example_counts: Dict[str, int], last_statistics: Optional[ModelStatistics]) -> bool:
+    def is_satisfied(self, example_counts: Dict[str, int], last_statistics: Optional[ModelStats]) -> bool:
         if len(example_counts) < 2:
             logger.info('Less than two label types present ({})'.format(len(example_counts)))
             return False

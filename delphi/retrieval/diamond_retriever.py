@@ -13,6 +13,7 @@ from delphi.object_provider import ObjectProvider
 from delphi.proto.learning_module_pb2 import DelphiObject
 from delphi.retrieval.diamond_attribute_provider import DiamondAttributeProvider
 from delphi.retrieval.retriever import Retriever
+from delphi.retrieval.retriever_stats import RetrieverStats
 
 STRING_CODEC = StringAttributeCodec()
 
@@ -41,6 +42,7 @@ class DiamondRetriever(Retriever):
             del result[ATTR_DATA]
             object_id = STRING_CODEC.decode(result[ATTR_OBJ_ID])
 
+            # Optimization to directly load the data from local disk if possible instead of holding it in memory
             if self._diamond_config is not None \
                     and STRING_CODEC.decode(result[ATTR_DEVICE_NAME]) in self._diamond_config.serverids \
                     and object_id.startswith('http://localhost'):
@@ -69,3 +71,7 @@ class DiamondRetriever(Retriever):
         del dct[ATTR_DATA]
 
         return DelphiObject(objectId=object_id, content=content, attributes=dct)
+
+    def get_stats(self) -> RetrieverStats:
+        stats = self._search.get_stats()
+        return RetrieverStats(stats['objs_total'], stats['objs_dropped'], stats['objs_false_negative'])

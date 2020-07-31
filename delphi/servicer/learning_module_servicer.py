@@ -4,6 +4,7 @@ from typing import Iterable
 import grpc
 from google.protobuf import json_format
 from google.protobuf.empty_pb2 import Empty
+from google.protobuf.wrappers_pb2 import Int64Value
 from logzero import logger
 from opendiamond.client.search import DiamondSearch, FilterSpec, Blob
 from opendiamond.scope import ScopeCookie
@@ -15,9 +16,9 @@ from delphi.context.model_trainer_context import ModelTrainerContext
 from delphi.learning_module_stub import LearningModuleStub
 from delphi.mpncov.mpncov_trainer import MPNCovTrainer
 from delphi.object_provider import ObjectProvider
-from delphi.proto.learning_module_pb2 import InferRequest, InferResult, ModelStatistics, \
+from delphi.proto.learning_module_pb2 import InferRequest, InferResult, ModelStats, \
     ImportModelRequest, ModelArchive, LabeledExampleRequest, SearchId, \
-    AddLabeledExampleIdsRequest, LabeledExample, DelphiObject, GetObjectsRequest
+    AddLabeledExampleIdsRequest, LabeledExample, DelphiObject, GetObjectsRequest, SearchStats
 from delphi.proto.learning_module_pb2 import SearchRequest, RetrainPolicyConfig, SVMMode, SVMConfig, Dataset, \
     SelectorConfig, ReexaminationStrategyConfig
 from delphi.proto.learning_module_pb2_grpc import LearningModuleServiceServicer
@@ -142,8 +143,20 @@ class LearningModuleServicer(LearningModuleServiceServicer):
         return Empty()
 
     @log_exceptions_and_abort
-    def GetModelStatistics(self, request: SearchId, context: grpc.ServicerContext) -> ModelStatistics:
-        return self._manager.get_search(request).get_model_statistics()
+    def GetSearchStats(self, request: SearchId, context: grpc.ServicerContext) -> SearchStats:
+        search = self._manager.get_search(request)
+        retriever_stats = search.retriever.get_stats()
+        selector_stats = search.selector.get_stats()
+        passed_objects = selector_stats.passed_objects
+        return SearchStats(totalObjects=retriever_stats.total_objects,
+                           processedObjects=retriever_stats.dropped_objects + selector_stats.processed_objects,
+                           droppedObjects=retriever_stats.dropped_objects + selector_stats.dropped_objects,
+                           passedObjects=Int64Value(value=passed_objects) if passed_objects is not None else None,
+                           falseNegatives=retriever_stats.false_negatives + selector_stats.false_negatives)
+
+    @log_exceptions_and_abort
+    def GetModelStats(self, request: SearchId, context: grpc.ServicerContext) -> ModelStats:
+        return self._manager.get_search(request).get_model_stats()
 
     @log_exceptions_and_abort
     def ImportModel(self, request: ImportModelRequest, context: grpc.ServicerContext) -> Empty:

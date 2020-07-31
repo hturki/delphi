@@ -7,6 +7,7 @@ from delphi.model import Model
 from delphi.result_provider import ResultProvider
 from delphi.selection.reexamination_strategy import ReexaminationStrategy
 from delphi.selection.selector import Selector
+from delphi.selection.selector_stats import SelectorStats
 from delphi.utils import to_iter
 
 
@@ -26,6 +27,9 @@ class TopKSelector(Selector):
         self._result_iterator = to_iter(self._result_queue)
         self._model_present = False
 
+        self._process_lock = threading.Lock()
+        self._items_processed = 0
+
     def add_result(self, result: ResultProvider) -> None:
         with self._insert_lock:
             if not self._model_present:
@@ -37,6 +41,10 @@ class TopKSelector(Selector):
                     for _ in range(self._k):
                         self._result_queue.put(self._priority_queues[-1].get()[-1])
                     self._batch_added = 0
+
+        with self._process_lock:
+            self._items_processed += 1
+
 
     def finish(self) -> None:
         self._result_queue.put(None)
@@ -60,3 +68,9 @@ class TopKSelector(Selector):
                 self._priority_queues = [queue.PriorityQueue()]
 
             self._batch_added = 0
+
+    def get_stats(self) -> SelectorStats:
+        with self._process_lock:
+            items_processed = self._items_processed
+
+        return SelectorStats(items_processed, 0, None, 0)

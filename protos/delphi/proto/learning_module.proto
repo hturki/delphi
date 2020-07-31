@@ -17,7 +17,8 @@ service LearningModuleService {
   rpc AddLabeledExamples (stream LabeledExampleRequest) returns (google.protobuf.Empty);
   rpc AddLabeledExampleIds (AddLabeledExampleIdsRequest) returns (google.protobuf.Empty);
 
-  rpc GetModelStatistics (SearchId) returns (ModelStatistics);
+  rpc GetSearchStats (SearchId) returns (SearchStats);
+  rpc GetModelStats (SearchId) returns (ModelStats);
   rpc ImportModel (ImportModelRequest) returns (google.protobuf.Empty);
   rpc ExportModel (SearchId) returns (ModelArchive);
 }
@@ -80,7 +81,15 @@ message AddLabeledExampleIdsRequest {
   map<string, string> examples = 2;
 }
 
-message ModelStatistics {
+message SearchStats {
+  int64 totalObjects = 1;
+  int64 processedObjects = 2;
+  int64 droppedObjects = 3;
+  google.protobuf.Int64Value passedObjects = 4;
+  int64 falseNegatives = 5;
+}
+
+message ModelStats {
   int64 testExamples = 1;
   double auc = 2;
   ModelMetrics validationMetrics = 3;

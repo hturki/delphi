@@ -27,7 +27,7 @@ from delphi.model_trainer import ModelTrainer, TrainingStyle
 from delphi.object_provider import ObjectProvider
 from delphi.proto.internal_pb2 import ExampleMetadata, TestResult, StageModelRequest, TrainModelRequest, \
     DiscardModelRequest, PromoteModelRequest, SubmitTestRequest, ValidateTestResultsRequest
-from delphi.proto.learning_module_pb2 import ModelStatistics, ModelMetrics, ModelArchive, SearchId, LabeledExample, \
+from delphi.proto.learning_module_pb2 import ModelStats, ModelMetrics, ModelArchive, SearchId, LabeledExample, \
     ExampleSet
 from delphi.result_provider import ResultProvider
 from delphi.retrain.retrain_policy import RetrainPolicy
@@ -59,7 +59,7 @@ class Search(DataManagerContext, ModelTrainerContext):
         self._tb_writer: Optional[SummaryWriter] = None
         self._data_manager = DataManager(self)
 
-        self._model_stats = ModelStatistics(version=-1)
+        self._model_stats = ModelStats(version=-1)
         self._model_lock = threading.Lock()
         self._initial_model_event = threading.Event()
         self._model_event = threading.Event()
@@ -108,10 +108,10 @@ class Search(DataManagerContext, ModelTrainerContext):
     def get_example(self, example_set: ExampleSet, label: str, example: str) -> Path:
         return self._data_manager.get_example_path(example_set, label, example)
 
-    def get_model_statistics(self) -> ModelStatistics:
+    def get_model_stats(self) -> ModelStats:
         # We assume that the master is the source of truth
         if self._node_index != 0:
-            return self._nodes[0].api.GetModelStatistics(self._id)
+            return self._nodes[0].api.GetModelStats(self._id)
 
         with self._model_lock:
             return self._model_stats
@@ -207,7 +207,7 @@ class Search(DataManagerContext, ModelTrainerContext):
 
         with self._model_lock:
             self._model = None
-            self._model_stats = ModelStatistics(version=-1)
+            self._model_stats = ModelStats(version=-1)
             self._last_trained_version = -1
 
         self.selector.new_model(None)
@@ -468,7 +468,7 @@ class Search(DataManagerContext, ModelTrainerContext):
         logger.error('Failed to start Tensorboard')
 
     @staticmethod
-    def create_model_stats(version: int, target: List[int], pred: List[float], is_probability: bool) -> ModelStatistics:
+    def create_model_stats(version: int, target: List[int], pred: List[float], is_probability: bool) -> ModelStats:
         assert len(target) == len(pred)
         pred = np.array(pred)
         target = np.array(target)
@@ -493,7 +493,7 @@ class Search(DataManagerContext, ModelTrainerContext):
         _, fp, fn, tp = confusion_matrix(target, pred).ravel()
         stats = classification_report(target, pred, output_dict=True)
 
-        return ModelStatistics(
+        return ModelStats(
             testExamples=len(pred),
             auc=ap,
             validationMetrics=ModelMetrics(
