@@ -207,6 +207,7 @@ class LearningModuleServicer(LearningModuleServiceServicer):
             diamond_search = DiamondSearch([ScopeCookie.parse(x) for x in dataset.diamond.cookies],
                                            [FilterSpec(x.name, Blob(x.code), x.arguments, Blob(x.blob), x.dependencies,
                                                        x.minScore, x.maxScore) for x in dataset.diamond.filters],
+                                           False,
                                            list(dataset.diamond.attributes) + [ATTR_DATA])
             return DiamondRetriever(diamond_search)
         else:

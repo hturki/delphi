@@ -27,9 +27,11 @@ dependencies:
   - intel-openmp=2020.1=217
   - joblib=0.14.1=py_0
   - jpeg=9b=h024ee3a_2
+  - krb5=1.17.1=h173b8e3_0
   - ld_impl_linux-64=2.33.1=h53a641e_7
   - libblas=3.8.0=15_mkl
   - libcblas=3.8.0=15_mkl
+  - libcurl=7.69.1=h20c2e04_0
   - libedit=3.1.20181209=hc058e9b_0
   - libffi=3.3=he6710b0_1
   - libgcc-ng=9.1.0=hdf63c60_0
@@ -37,6 +39,7 @@ dependencies:
   - liblapack=3.8.0=15_mkl
   - libpng=1.6.37=hbc83047_0
   - libprotobuf=3.11.4=hd408876_0
+  - libssh2=1.9.0=h1ba5d50_1
   - libstdcxx-ng=9.1.0=hdf63c60_0
   - libtiff=4.1.0=h2733197_0
   - logzero=1.5.0=py37hc8dfbb8_1002
@@ -46,6 +49,7 @@ dependencies:
   - mkl-service=2.3.0=py37he904b0f_0
   - mkl_fft=1.0.15=py37ha843d7b_0
   - mkl_random=1.1.0=py37hd6b4f25_0
+  - mmh3=2.5.1=py37he1b5a44_0
   - more-itertools=8.4.0=py_0
   - multiprocessing-logging=0.2.6=py_0
   - ncurses=6.2=he6710b0_1
@@ -61,6 +65,7 @@ dependencies:
   - pyasn1=0.4.8=py_0
   - pyasn1-modules=0.2.7=py_0
   - pycparser=2.20=py_0
+  - pycurl=7.43.0.5=py37h1ba5d50_0
   - pyjwt=1.7.1=py37_0
   - pyopenssl=19.1.0=py37_0
   - pysocks=1.7.1=py37_0
@@ -89,6 +94,7 @@ dependencies:
   - urllib3=1.25.8=py37_0
   - werkzeug=1.0.1=py_0
   - wheel=0.34.2=py37_0
+  - xmltodict=0.12.0=py_0
   - xz=5.2.5=h7b6447c_0
   - yaml=0.1.7=h96e3832_1
   - zlib=1.2.11=h7b6447c_3
@@ -99,4 +105,4 @@ dependencies:
     - grpcio-tools==1.29.0
     - lxml==4.5.2
     - mypy-protobuf==1.20
-    - opendiamond==10.0.0
+    - opendiamond==10.1.0
