@@ -22,7 +22,6 @@ class Identity(nn.Module):
     def forward(self, x):
         return x
 
-
 class FeatureProvider(object):
 
     def __init__(self, model_dir: Optional[Path], feature_extractor: str, cache: FeatureCache):
@@ -46,8 +45,11 @@ class FeatureProvider(object):
     def get_cached_vector(self, result_key: str) -> Optional[List[float]]:
         return self.cache.get(result_key)
 
+
+
     def preprocess(self, content: bytes) -> torch.Tensor:
         image = Image.open(io.BytesIO(content))
+
         if image.mode != 'RGB':
             image = image.convert('RGB')
 

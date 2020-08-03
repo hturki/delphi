@@ -9,6 +9,7 @@ from pathlib import Path
 import grpc
 import logzero
 import multiprocessing_logging
+import torchvision
 import yaml
 from logzero import logger
 
@@ -23,7 +24,7 @@ from delphi.svm.redis_feature_cache import RedisFeatureCache
 from delphi.utils import log_exceptions
 
 logzero.loglevel(logging.INFO)
-
+torchvision.set_image_backend('accimage')
 
 def dumpstacks(_, __):
     traceback.print_stack()

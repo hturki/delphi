@@ -274,7 +274,7 @@ class DataManager(object):
                 self._example_counts[example_set] += 1
                 example_dir = self._examples_dir / self._to_dir(example_set) / label.name
                 example_dir.mkdir(parents=True, exist_ok=True)
-                example_path = example_dir / example_file
+                example_path = example_dir / example_file.name
                 example_file.rename(example_path)
                 logger.info('Promoted example with label {} to path {}'.format(label.name, example_path))
 

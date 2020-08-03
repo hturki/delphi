@@ -261,13 +261,6 @@ class Search(DataManagerContext, ModelTrainerContext):
             self._model_event.set()
 
     def start(self, examples: Iterable[LabeledExample]):
-        threading.Thread(target=self._retriever_thread, args=(examples,), name='get-objects').start()
-
-    def stop(self) -> None:
-        self._abort_event.set()
-
-    @log_exceptions
-    def _retriever_thread(self, examples: Iterable[LabeledExample]) -> None:
         try:
             self.retriever.start()
             peekable_examples = peekable(examples)
@@ -275,8 +268,19 @@ class Search(DataManagerContext, ModelTrainerContext):
                 assert self._node_index == 0
                 self._has_initial_examples = True
                 self._data_manager.add_labeled_examples(peekable_examples)
-                self._initial_model_event.set()
+                self._initial_model_event.wait()
+            threading.Thread(target=self._retriever_thread, name='get-objects').start()
+        except Exception as e:
+            self.retriever.stop()
+            self.selector.finish()
+            raise e
 
+    def stop(self) -> None:
+        self._abort_event.set()
+
+    @log_exceptions
+    def _retriever_thread(self) -> None:
+        try:
             for result in self.infer(self.retriever.get_objects()):
                 self.selector.add_result(result)
                 if self._abort_event.is_set():

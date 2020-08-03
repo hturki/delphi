@@ -1,4 +1,5 @@
 import io
+import threading
 from pathlib import Path
 from typing import Iterable, Sized
 
@@ -22,6 +23,7 @@ class DiamondRetriever(Retriever):
 
     def __init__(self, search: DiamondSearch):
         self._search = search
+        self._start_event = threading.Event()
 
         try:
             self._diamond_config = DiamondConfig()
@@ -32,6 +34,7 @@ class DiamondRetriever(Retriever):
 
     def start(self) -> None:
         self._search.start()
+        self._start_event.set()
 
     def stop(self) -> None:
         self._search.close()
@@ -73,5 +76,7 @@ class DiamondRetriever(Retriever):
         return DelphiObject(objectId=object_id, content=content, attributes=dct)
 
     def get_stats(self) -> RetrieverStats:
+        self._start_event.wait()
+
         stats = self._search.get_stats()
         return RetrieverStats(stats['objs_total'], stats['objs_dropped'], stats['objs_false_negative'])
