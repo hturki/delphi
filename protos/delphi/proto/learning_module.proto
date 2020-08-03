@@ -9,6 +9,7 @@ package edu.cmu.cs.delphi.api;
 service LearningModuleService {
   rpc StartSearch (stream SearchRequest) returns (google.protobuf.Empty);
   rpc StopSearch (SearchId) returns (google.protobuf.Empty);
+  rpc GetSearches (google.protobuf.Empty) returns (stream SearchInfo);
 
   rpc GetResults (SearchId) returns (stream InferResult);
   rpc GetObjects (GetObjectsRequest) returns (stream DelphiObject);
@@ -137,6 +138,7 @@ message SearchConfig {
   bool onlyUseBetterModels = 6;
   Dataset dataset = 7;
   SelectorConfig selector = 8;
+  string metadata = 9;
 }
 
 message ModelConditionConfig {
@@ -256,3 +258,9 @@ message TopReexaminationStrategyConfig {
 
 message FullReexaminationStrategyConfig {
 }
+
+message SearchInfo {
+  SearchId searchId = 1;
+  string metadata = 2;
+}
+

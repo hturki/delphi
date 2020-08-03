@@ -5,13 +5,14 @@ from typing import Iterable, Sized
 
 from logzero import logger
 from opendiamond.attributes import StringAttributeCodec
-from opendiamond.client.search import DiamondSearch
+from opendiamond.client.search import DiamondSearch, FilterSpec, Blob
 from opendiamond.config import DiamondConfig
 from opendiamond.protocol import XDR_reexecute
+from opendiamond.scope import ScopeCookie
 from opendiamond.server.object_ import ATTR_OBJ_ID, ATTR_DATA, ATTR_DEVICE_NAME
 
 from delphi.object_provider import ObjectProvider
-from delphi.proto.learning_module_pb2 import DelphiObject
+from delphi.proto.learning_module_pb2 import DelphiObject, DiamondDataset
 from delphi.retrieval.diamond_attribute_provider import DiamondAttributeProvider
 from delphi.retrieval.retriever import Retriever
 from delphi.retrieval.retriever_stats import RetrieverStats
@@ -21,8 +22,9 @@ STRING_CODEC = StringAttributeCodec()
 
 class DiamondRetriever(Retriever):
 
-    def __init__(self, search: DiamondSearch):
-        self._search = search
+    def __init__(self, dataset: DiamondDataset):
+        self._dataset = dataset
+        self._search = self._create_search()
         self._start_event = threading.Event()
 
         try:
@@ -58,15 +60,10 @@ class DiamondRetriever(Retriever):
     def get_object(self, object_id: str, attributes: Sized) -> DelphiObject:
         # Each Delphi server should be connected to only one Diamond server
         conn = next(iter(self._search._connections.values()))
-        try:
-            conn.connect()
-            conn.setup(next(iter(self._search._cookie_map.values())), self._search._filters)
 
-            # Send reexecute request
-            request = XDR_reexecute(object_id=object_id, attrs=attributes if len(attributes) > 1 else None)
-            reply = conn.control.reexecute_filters(request)
-        finally:
-            conn.close()
+        # Send reexecute request
+        request = XDR_reexecute(object_id=object_id, attrs=attributes if len(attributes) > 1 else None)
+        reply = conn.control.reexecute_filters(request)
 
         # Return object attributes
         dct = dict((attr.name, attr.value) for attr in reply.attrs)
@@ -80,3 +77,10 @@ class DiamondRetriever(Retriever):
 
         stats = self._search.get_stats()
         return RetrieverStats(stats['objs_total'], stats['objs_dropped'], stats['objs_false_negative'])
+
+    def _create_search(self) -> DiamondSearch:
+        return DiamondSearch([ScopeCookie.parse(x) for x in self._dataset.cookies],
+                             [FilterSpec(x.name, Blob(x.code), x.arguments, Blob(x.blob), x.dependencies,
+                                         x.minScore, x.maxScore) for x in self._dataset.filters],
+                             False,
+                             list(self._dataset.attributes) + [ATTR_DATA])

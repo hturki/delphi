@@ -6,8 +6,6 @@ from google.protobuf import json_format
 from google.protobuf.empty_pb2 import Empty
 from google.protobuf.wrappers_pb2 import Int64Value
 from logzero import logger
-from opendiamond.client.search import DiamondSearch, FilterSpec, Blob
-from opendiamond.scope import ScopeCookie
 from opendiamond.server.object_ import ATTR_DATA
 
 from delphi.condition.examples_per_label_condition import ExamplesPerLabelCondition
@@ -18,7 +16,7 @@ from delphi.mpncov.mpncov_trainer import MPNCovTrainer
 from delphi.object_provider import ObjectProvider
 from delphi.proto.learning_module_pb2 import InferRequest, InferResult, ModelStats, \
     ImportModelRequest, ModelArchive, LabeledExampleRequest, SearchId, \
-    AddLabeledExampleIdsRequest, LabeledExample, DelphiObject, GetObjectsRequest, SearchStats
+    AddLabeledExampleIdsRequest, LabeledExample, DelphiObject, GetObjectsRequest, SearchStats, SearchInfo
 from delphi.proto.learning_module_pb2 import SearchRequest, RetrainPolicyConfig, SVMMode, SVMConfig, Dataset, \
     SelectorConfig, ReexaminationStrategyConfig
 from delphi.proto.learning_module_pb2_grpc import LearningModuleServiceServicer
@@ -89,7 +87,7 @@ class LearningModuleServicer(LearningModuleServiceServicer):
             trainers.append(condition_builder(trainer))
 
         search.trainers = trainers
-        self._manager.set_search(config.searchId, search)
+        self._manager.set_search(config.searchId, search, config.metadata)
 
         logger.info(
             'Starting search with id {} and parameters:\n{}'.format(config.searchId.value,
@@ -103,6 +101,11 @@ class LearningModuleServicer(LearningModuleServiceServicer):
         search = self._manager.remove_search(request)
         search.stop()
         return Empty()
+
+    @log_exceptions_and_abort
+    def GetSearches(self, request: SearchId, context: grpc.ServicerContext) -> Iterable[SearchInfo]:
+        for search_id, metadata in self._manager.get_searches():
+            yield SearchInfo(searchId=search_id, metadata=metadata)
 
     @log_exceptions_and_abort
     def GetResults(self, request: SearchId, context: grpc.ServicerContext) -> Iterable[InferResult]:
@@ -217,11 +220,6 @@ class LearningModuleServicer(LearningModuleServiceServicer):
 
     def _get_retriever(self, dataset: Dataset) -> Retriever:
         if dataset.HasField('diamond'):
-            diamond_search = DiamondSearch([ScopeCookie.parse(x) for x in dataset.diamond.cookies],
-                                           [FilterSpec(x.name, Blob(x.code), x.arguments, Blob(x.blob), x.dependencies,
-                                                       x.minScore, x.maxScore) for x in dataset.diamond.filters],
-                                           False,
-                                           list(dataset.diamond.attributes) + [ATTR_DATA])
-            return DiamondRetriever(diamond_search)
+            return DiamondRetriever(dataset.diamond)
         else:
             raise NotImplementedError('unknown dataset: {}'.format(json_format.MessageToJson(dataset)))
