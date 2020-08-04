@@ -1,5 +1,5 @@
 from abc import ABCMeta, abstractmethod
-from typing import Iterable, Optional
+from typing import Optional
 
 from delphi.model import Model
 from delphi.result_provider import ResultProvider
@@ -17,7 +17,7 @@ class Selector(metaclass=ABCMeta):
         pass
 
     @abstractmethod
-    def get_results(self) -> Iterable[ResultProvider]:
+    def get_result(self) -> Optional[ResultProvider]:
         pass
 
     @abstractmethod

@@ -232,12 +232,18 @@ message Filter {
 message SelectorConfig {
   oneof value {
     TopKSelectorConfig topk = 1;
+    ThresholdConfig threshold = 2;
   }
 }
 
 message TopKSelectorConfig {
   int32 k = 1;
   int32 batchSize = 2;
+  ReexaminationStrategyConfig reexaminationStrategy = 3;
+}
+
+message ThresholdConfig {
+  double threshold = 1;
   ReexaminationStrategyConfig reexaminationStrategy = 3;
 }
 

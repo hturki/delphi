@@ -9,6 +9,7 @@ from opendiamond.client.search import DiamondSearch, FilterSpec, Blob
 from opendiamond.config import DiamondConfig
 from opendiamond.protocol import XDR_reexecute
 from opendiamond.scope import ScopeCookie
+from opendiamond.server.filter import ATTR_GT_LABEL
 from opendiamond.server.object_ import ATTR_OBJ_ID, ATTR_DATA, ATTR_DEVICE_NAME
 
 from delphi.object_provider import ObjectProvider
@@ -55,7 +56,8 @@ class DiamondRetriever(Retriever):
             else:
                 image_provider = io.BytesIO(content)
 
-            yield ObjectProvider(object_id, content, DiamondAttributeProvider(result, image_provider))
+            yield ObjectProvider(object_id, content, DiamondAttributeProvider(result, image_provider),
+                                 ATTR_GT_LABEL in result)
 
     def get_object(self, object_id: str, attributes: Sized) -> DelphiObject:
         # Each Delphi server should be connected to only one Diamond server

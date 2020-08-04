@@ -10,9 +10,14 @@ class TopReexaminationStrategy(ReexaminationStrategy):
     def __init__(self, k: int):
         self._k = k
 
-    def reexamine(self, model: Model, queues: List[queue.PriorityQueue]):
+    def revisits_old_results(self) -> bool:
+        return True
+
+    def get_new_queues(self, model: Model, old_queues: List[queue.PriorityQueue]) -> List[queue.PriorityQueue]:
+        new_queue = queue.PriorityQueue()
+
         to_reexamine = []
-        for priority_queue in queues[:-1]:
+        for priority_queue in old_queues:
             for _ in range(self._k):
                 try:
                     to_reexamine.append(priority_queue.get_nowait()[1])
@@ -20,4 +25,6 @@ class TopReexaminationStrategy(ReexaminationStrategy):
                     break
 
         for result in model.infer(to_reexamine):
-            queues[-1].put((-result.score, result.id, result))
+            new_queue.put((-result.score, result.id, result))
+
+        return old_queues + [new_queue]

@@ -91,7 +91,7 @@ class Search(DataManagerContext, ModelTrainerContext):
             else:
                 # Pass all examples until user has labeled enough examples to train a model
                 for request in requests:
-                    yield ResultProvider(request.id, '1', None, None, request.attributes)
+                    yield ResultProvider(request.id, '1', None, None, request.attributes, request.gt)
                 return
 
         with self._model_lock:

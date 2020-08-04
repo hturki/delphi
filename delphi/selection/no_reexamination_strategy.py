@@ -7,5 +7,8 @@ from delphi.selection.reexamination_strategy import ReexaminationStrategy
 
 class NoReexaminationStrategy(ReexaminationStrategy):
 
-    def reexamine(self, model: Model, queues: List[queue.PriorityQueue]):
-        pass
+    def revisits_old_results(self) -> bool:
+        return False
+
+    def get_new_queues(self, model: Model, old_queues: List[queue.PriorityQueue]) -> List[queue.PriorityQueue]:
+        return [queue.PriorityQueue()]

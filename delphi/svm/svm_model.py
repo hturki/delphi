@@ -17,7 +17,7 @@ from delphi.result_provider import ResultProvider
 from delphi.simple_attribute_provider import SimpleAttributeProvider
 from delphi.svm.feature_provider import FeatureProvider, BATCH_SIZE, get_worker_feature_provider, \
     set_worker_feature_provider
-from delphi.utils import log_exceptions
+from delphi.utils import log_exceptions, to_iter
 
 
 # return object_provider, whether to preprocess, vector or (image, key)
@@ -30,7 +30,7 @@ def load_from_path(image_path: Path) -> Tuple[ObjectProvider, bool, Union[List[f
 
     key = get_worker_feature_provider().get_result_key_name(name)
     cached_vector = get_worker_feature_provider().get_cached_vector(key)
-    provider = ObjectProvider(object_id, b'', SimpleAttributeProvider({}))
+    provider = ObjectProvider(object_id, b'', SimpleAttributeProvider({}), False)
     if cached_vector is not None:
         return provider, False, cached_vector
     else:
@@ -68,11 +68,37 @@ class SVMModel(Model):
         return self._version
 
     def infer(self, requests: Iterable[ObjectProvider]) -> Iterable[ResultProvider]:
-        with mp.Pool(min(16, mp.cpu_count()), initializer=set_worker_feature_provider,
-                     initargs=(self._feature_provider.feature_extractor,
-                               self._feature_provider.cache)) as pool:
-            images = pool.imap_unordered(load_from_content, requests, chunksize=64)
-            yield from self._infer_inner(images)
+        abort_event = threading.Event()
+        request_queue = queue.Queue(100)
+        exceptions = []
+
+        @log_exceptions
+        def queue_requests():
+            try:
+                for request in requests:
+                    while True:
+                        try:
+                            request_queue.put(request, timeout=10)
+                            break
+                        except queue.Full:
+                            logger.info('queue full, will try again')
+            except Exception as e:
+                exceptions.append(e)
+            finally:
+                request_queue.put(None)
+
+        threading.Thread(target=queue_requests, name='queue-requests').start()
+
+        try:
+            with mp.Pool(min(16, mp.cpu_count()), initializer=set_worker_feature_provider,
+                         initargs=(self._feature_provider.feature_extractor,
+                                   self._feature_provider.cache)) as pool:
+                images = pool.imap_unordered(load_from_content, to_iter(request_queue), chunksize=64)
+                yield from self._infer_inner(images)
+            if len(exceptions) > 0:
+                raise exceptions[0]
+        finally:
+            abort_event.set()
 
     def infer_dir(self, directory: Path, callback_fn: Callable[[int, float], None]) -> None:
         with mp.Pool(min(16, mp.cpu_count()), initializer=set_worker_feature_provider,
@@ -167,7 +193,8 @@ class SVMModel(Model):
                     score = scores[i]
                     label = '1' if score > 0 else '0'
 
-                yield ResultProvider(providers[i].id, label, score, self.version, providers[i].attributes)
+                yield ResultProvider(providers[i].id, label, score, self.version, providers[i].attributes,
+                                     providers[i].gt)
 
         logger.info('{} examples scored'.format(scored))
 

@@ -70,4 +70,4 @@ class PytorchModelBase(Model):
         for i in range(len(batch)):
             score = predictions[i]
             yield ResultProvider(batch[i][0].id, '1' if score >= 0.5 else '0', score, self.version,
-                                 batch[i][0].attributes)
+                                 batch[i][0].attributes, batch[i][0].gt)

@@ -7,6 +7,11 @@ from delphi.model import Model
 
 class ReexaminationStrategy(metaclass=ABCMeta):
 
+    @property
     @abstractmethod
-    def reexamine(self, model: Model, queues: List[queue.PriorityQueue]):
+    def revisits_old_results(self) -> bool:
+        pass
+
+    @abstractmethod
+    def get_new_queues(self, model: Model, old_queues: List[queue.PriorityQueue]) -> List[queue.PriorityQueue]:
         pass

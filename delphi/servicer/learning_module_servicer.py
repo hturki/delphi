@@ -89,9 +89,8 @@ class LearningModuleServicer(LearningModuleServiceServicer):
         search.trainers = trainers
         self._manager.set_search(config.searchId, search, config.metadata)
 
-        logger.info(
-            'Starting search with id {} and parameters:\n{}'.format(config.searchId.value,
-                                                                    json_format.MessageToJson(config)))
+        logger.info('Starting search with id {} and parameters:\n{}'.format(config.searchId.value,
+                                                                            json_format.MessageToJson(config)))
         search.start(x.example for x in request)
         return Empty()
 
@@ -109,7 +108,10 @@ class LearningModuleServicer(LearningModuleServiceServicer):
 
     @log_exceptions_and_abort
     def GetResults(self, request: SearchId, context: grpc.ServicerContext) -> Iterable[InferResult]:
-        for result in self._manager.get_search(request).selector.get_results():
+        while True:
+            result = self._manager.get_search(request).selector.get_result()
+            if result is None:
+                return
             yield InferResult(objectId=result.id, label=result.label, score=result.score,
                               modelVersion=result.model_version, attributes=result.attributes.get())
 
@@ -123,8 +125,8 @@ class LearningModuleServicer(LearningModuleServiceServicer):
     def Infer(self, request: Iterable[InferRequest], context: grpc.ServicerContext) -> Iterable[InferResult]:
         search_id = next(request).searchId
         for result in self._manager.get_search(search_id).infer(
-                ObjectProvider(x.object.objectId, x.object.content, SimpleAttributeProvider(x.object.attributes)) for x
-                in request):
+                ObjectProvider(x.object.objectId, x.object.content, SimpleAttributeProvider(x.object.attributes), False)
+                for x in request):
             yield InferResult(objectId=result.id, label=result.label, score=result.score,
                               modelVersion=result.model_version, attributes=result.attributes.get())
 
