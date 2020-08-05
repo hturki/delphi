@@ -11,22 +11,23 @@ from torchvision import datasets
 from delphi.model import Model
 from delphi.object_provider import ObjectProvider
 from delphi.result_provider import ResultProvider
-from delphi.pytorch.pytorch_trainer_base import get_test_transforms
+from delphi.utils import log_exceptions
 
 
 def preprocess(request: ObjectProvider) -> Tuple[ObjectProvider, torch.Tensor]:
+    get_semaphore().acquire()
+
     return request, get_test_transforms()(request.content)
 
 
 class PytorchModelBase(Model):
     test_transforms: transforms.Compose
 
-    def __init__(self, test_transforms: transforms.Compose, batch_size: int, version: int, pool: mp.Pool):
+    def __init__(self, test_transforms: transforms.Compose, batch_size: int, version: int):
         self._batch_size = batch_size
         self._test_transforms = test_transforms
         self._version = version
         self._device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
-        self._pool = pool
 
     @abstractmethod
     def get_predictions(self, input: torch.Tensor) -> List[float]:
@@ -37,14 +38,19 @@ class PytorchModelBase(Model):
         return self._version
 
     def infer(self, requests: Iterable[ObjectProvider]) -> Iterable[ResultProvider]:
+        semaphore = mp.Semaphore(256)  # Make sure that the load function doesn't overload the consumer
         batch = []
-        items = self._pool.imap_unordered(preprocess, requests)
 
-        for item in items:
-            batch.append(item)
-            if len(batch) == self._batch_size:
-                yield from self._process_batch(batch)
-                batch = []
+        with mp.Pool(min(16, mp.cpu_count()), initializer=init_worker,
+                     initargs=(self._test_transforms, semaphore)) as pool:
+            items = pool.imap_unordered(preprocess, requests)
+
+            for item in items:
+                semaphore.release()
+                batch.append(item)
+                if len(batch) == self._batch_size:
+                    yield from self._process_batch(batch)
+                    batch = []
 
         if len(batch) > 0:
             yield from self._process_batch(batch)
@@ -71,3 +77,26 @@ class PytorchModelBase(Model):
             score = predictions[i]
             yield ResultProvider(batch[i][0].id, '1' if score >= 0.5 else '0', score, self.version,
                                  batch[i][0].attributes, batch[i][0].gt)
+
+
+_test_transforms: transforms.Compose
+_semaphore: mp.Semaphore
+
+
+def get_test_transforms() -> transforms.Compose:
+    global _test_transforms
+    return _test_transforms
+
+
+def get_semaphore() -> mp.Semaphore:
+    global _semaphore
+    return _semaphore
+
+
+@log_exceptions
+def init_worker(test_transforms: transforms.Compose, semaphore: mp.Semaphore):
+    global _test_transforms
+    _test_transforms = test_transforms
+
+    global _semaphore
+    _semaphore = semaphore

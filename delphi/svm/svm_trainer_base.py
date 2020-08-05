@@ -34,6 +34,8 @@ F1_SCORER = make_scorer(f1_score, pos_label='1')
 # return label, whether to preprocess, vector or (image, key)
 @log_exceptions
 def load_from_path(image_path: Path) -> Tuple[str, bool, Union[List[float], Any]]:
+    get_semaphore().acquire()
+
     split = image_path.parts
     label = split[-2]
     name = split[-1]
@@ -92,10 +94,12 @@ class SVMTrainerBase(ModelTrainerBase):
 
     # return label, vector or image, whether to preprocess
     def _get_example_features(self, example_dir: Path) -> Dict[str, List[List[float]]]:
-        with mp.Pool(min(16, mp.cpu_count()), initializer=set_worker_feature_provider,
+        semaphore = mp.Semaphore(256) # Make sure that the load function doesn't overload the consumer
+
+        with mp.Pool(min(16, mp.cpu_count()), initializer=init_worker,
                      initargs=(self.feature_provider.feature_extractor,
-                               self.feature_provider.cache)) as pool:
-            images = pool.imap_unordered(load_from_path, example_dir.glob('*/*'), chunksize=64)
+                               self.feature_provider.cache, semaphore)) as pool:
+            images = pool.imap_unordered(load_from_path, example_dir.glob('*/*'))
             feature_queue = queue.Queue()
 
             @log_exceptions
@@ -104,6 +108,7 @@ class SVMTrainerBase(ModelTrainerBase):
                 uncached = 0
                 batch = []
                 for label, should_process, payload in images:
+                    semaphore.release()
                     if should_process:
                         image, key = payload
                         batch.append((label,
@@ -142,3 +147,18 @@ class SVMTrainerBase(ModelTrainerBase):
         results = self.feature_provider.cache_and_get(keys, tensor, True)
         for item in items:
             feature_queue.put((item[0], results[item[2]]))
+
+
+_semaphore: mp.Semaphore
+
+
+def get_semaphore() -> mp.Semaphore:
+    global _semaphore
+    return _semaphore
+
+
+@log_exceptions
+def init_worker(feature_extractor: str, cache: FeatureCache, semaphore: mp.Semaphore):
+    set_worker_feature_provider(feature_extractor, cache)
+    global _semaphore
+    _semaphore = semaphore

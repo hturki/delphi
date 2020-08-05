@@ -9,7 +9,6 @@ from opendiamond.client.search import DiamondSearch, FilterSpec, Blob
 from opendiamond.config import DiamondConfig
 from opendiamond.protocol import XDR_reexecute
 from opendiamond.scope import ScopeCookie
-from opendiamond.server.filter import ATTR_GT_LABEL
 from opendiamond.server.object_ import ATTR_OBJ_ID, ATTR_DATA, ATTR_DEVICE_NAME
 
 from delphi.object_provider import ObjectProvider
@@ -18,6 +17,7 @@ from delphi.retrieval.diamond_attribute_provider import DiamondAttributeProvider
 from delphi.retrieval.retriever import Retriever
 from delphi.retrieval.retriever_stats import RetrieverStats
 
+ATTR_GT_LABEL = '_gt_label'  # attr of ground truth label
 STRING_CODEC = StringAttributeCodec()
 
 

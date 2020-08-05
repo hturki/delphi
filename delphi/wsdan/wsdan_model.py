@@ -1,5 +1,4 @@
 import io
-import multiprocessing as mp
 import uuid
 from typing import List, Any, Optional
 
@@ -24,8 +23,8 @@ WSDAN_TEST_TRANSFORMS = transforms.Compose([
 class WSDANModel(PytorchModelBase):
 
     def __init__(self, model: nn.Module, version: int, tb_writer: Optional[SummaryWriter], epoch: int,
-                 optimizer_dict: Any, feature_center: torch.Tensor, pool: mp.Pool):
-        super().__init__(WSDAN_TEST_TRANSFORMS, TEST_BATCH_SIZE, version, pool)
+                 optimizer_dict: Any, feature_center: torch.Tensor):
+        super().__init__(WSDAN_TEST_TRANSFORMS, TEST_BATCH_SIZE, version)
 
         self._model = model
         self._version = version

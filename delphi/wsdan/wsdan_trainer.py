@@ -22,7 +22,7 @@ from delphi.pytorch.pytorch_trainer_base import PytorchTrainerBase
 from delphi.utils import AverageMeter, get_weights
 from delphi.wsdan.wsdan import WSDAN
 from delphi.wsdan.wsdan_common import batch_augment
-from delphi.wsdan.wsdan_model import WSDANModel, WSDAN_TEST_TRANSFORMS
+from delphi.wsdan.wsdan_model import WSDANModel
 
 TRAIN_BATCH_SIZE = 16
 
@@ -30,7 +30,7 @@ TRAIN_BATCH_SIZE = 16
 class WSDANTrainer(PytorchTrainerBase):
 
     def __init__(self, context: ModelTrainerContext, distributed: bool, visualize: bool, freeze: Optional[int]):
-        super().__init__(context, WSDAN_TEST_TRANSFORMS, distributed)
+        super().__init__(context, distributed)
         self._visualize = visualize
 
         self._curr_epoch = 0
@@ -83,7 +83,7 @@ class WSDANTrainer(PytorchTrainerBase):
         model_pred.eval()
 
         return WSDANModel(model_pred, model_version, self._get_image_writer(), self._curr_epoch, checkpoint['optimizer'],
-                          checkpoint['feature_center'], self.pool)
+                          checkpoint['feature_center'])
 
     def train_model(self, train_dir: Path) -> Model:
         start_time = time.time()
@@ -183,7 +183,7 @@ class WSDANTrainer(PytorchTrainerBase):
         model_pred.eval()
 
         return WSDANModel(model_pred, self.get_new_version(), self._get_image_writer(), self._curr_epoch,
-                          self._optimizer.state_dict(), self._feature_center.cpu(), self.pool)
+                          self._optimizer.state_dict(), self._feature_center.cpu())
 
     def _get_image_writer(self) -> Optional[SummaryWriter]:
         return self.context.tb_writer if self._visualize else None

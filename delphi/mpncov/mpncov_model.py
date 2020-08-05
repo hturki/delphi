@@ -10,7 +10,6 @@ All rights reserved.
 '''
 
 import io
-import multiprocessing as mp
 from typing import List, Any
 
 import torch
@@ -31,8 +30,8 @@ MPNCOV_TEST_TRANSFORMS = transforms.Compose([
 
 class MPNCovModel(PytorchModelBase):
 
-    def __init__(self, model: nn.Module, version: int, epoch: int, optimizer_dict: Any, pool: mp.Pool):
-        super().__init__(MPNCOV_TEST_TRANSFORMS, TEST_BATCH_SIZE, version, pool)
+    def __init__(self, model: nn.Module, version: int, epoch: int, optimizer_dict: Any):
+        super().__init__(MPNCOV_TEST_TRANSFORMS, TEST_BATCH_SIZE, version)
 
         self._model = model
         self._version = version

@@ -16,7 +16,7 @@ from tqdm import tqdm
 from delphi.context.model_trainer_context import ModelTrainerContext
 from delphi.model import Model
 from delphi.mpncov.model_init import get_model
-from delphi.mpncov.mpncov_model import MPNCovModel, MPNCOV_TEST_TRANSFORMS
+from delphi.mpncov.mpncov_model import MPNCovModel
 from delphi.pytorch.distributed_proxy_sampler import DistributedProxySampler
 from delphi.pytorch.pytorch_trainer_base import PytorchTrainerBase
 from delphi.utils import get_weights, AverageMeter
@@ -27,7 +27,7 @@ TRAIN_BATCH_SIZE = 24
 class MPNCovTrainer(PytorchTrainerBase):
 
     def __init__(self, context: ModelTrainerContext, distributed: bool, freeze: Optional[int], model_dir: Path):
-        super().__init__(context, MPNCOV_TEST_TRANSFORMS, distributed)
+        super().__init__(context, distributed)
 
         self._curr_epoch = 0
         self._global_step = 0
@@ -81,8 +81,7 @@ class MPNCovTrainer(PytorchTrainerBase):
 
         model_pred = copy.deepcopy(self._model)
         model_pred.eval()
-        return MPNCovModel(model_pred, self.get_new_version(), self._curr_epoch, self._optimizer.state_dict(),
-                           self.pool)
+        return MPNCovModel(model_pred, self.get_new_version(), self._curr_epoch, self._optimizer.state_dict())
 
     def train_model(self, train_dir: Path) -> Model:
         start_time = time.time()
@@ -144,5 +143,4 @@ class MPNCovTrainer(PytorchTrainerBase):
         model_pred = copy.deepcopy(self._model)
         model_pred.eval()
 
-        return MPNCovModel(model_pred, self.get_new_version(), self._curr_epoch, self._optimizer.state_dict(),
-                           self.pool)
+        return MPNCovModel(model_pred, self.get_new_version(), self._curr_epoch, self._optimizer.state_dict())

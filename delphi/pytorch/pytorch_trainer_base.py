@@ -2,30 +2,16 @@ import os
 
 import torch
 import torch.distributed as dist
-import torch.multiprocessing as mp
-import torchvision.transforms as transforms
 from google.protobuf.any_pb2 import Any
 
 from delphi.context.model_trainer_context import ModelTrainerContext
 from delphi.model_trainer import TrainingStyle, DataRequirement
 from delphi.model_trainer_base import ModelTrainerBase
 
-_test_transforms: transforms.Compose
-
-
-def get_test_transforms() -> transforms.Compose:
-    global _test_transforms
-    return _test_transforms
-
-
-def set_test_transforms(test_transforms: transforms.Compose) -> None:
-    global _test_transforms
-    _test_transforms = test_transforms
-
 
 class PytorchTrainerBase(ModelTrainerBase):
 
-    def __init__(self, context: ModelTrainerContext, test_transforms: transforms.Compose, distributed: bool):
+    def __init__(self, context: ModelTrainerContext, distributed: bool):
         super().__init__()
         self.context = context
         self.distributed = distributed
@@ -44,7 +30,6 @@ class PytorchTrainerBase(ModelTrainerBase):
             torch.manual_seed(42)
 
         self.device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
-        self.pool = mp.Pool(initializer=set_test_transforms, initargs=(test_transforms,))
 
     @property
     def data_requirement(self) -> DataRequirement:
