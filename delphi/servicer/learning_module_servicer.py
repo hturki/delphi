@@ -118,8 +118,12 @@ class LearningModuleServicer(LearningModuleServiceServicer):
     @log_exceptions_and_abort
     def GetObjects(self, request: GetObjectsRequest, context: grpc.ServicerContext) -> Iterable[DelphiObject]:
         retriever = self._get_retriever(request.dataset)
-        for object_id in request.objectIds:
-            yield retriever.get_object(object_id, request.attributes)
+        try:
+            retriever.start()
+            for object_id in request.objectIds:
+                yield retriever.get_object(object_id, request.attributes)
+        finally:
+            retriever.stop()
 
     @log_exceptions_and_abort
     def Infer(self, request: Iterable[InferRequest], context: grpc.ServicerContext) -> Iterable[InferResult]:

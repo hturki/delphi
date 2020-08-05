@@ -27,6 +27,7 @@ class DiamondRetriever(Retriever):
         self._dataset = dataset
         self._search = self._create_search()
         self._start_event = threading.Event()
+        self._command_lock = threading.Lock()
 
         try:
             self._diamond_config = DiamondConfig()
@@ -60,12 +61,13 @@ class DiamondRetriever(Retriever):
                                  ATTR_GT_LABEL in result)
 
     def get_object(self, object_id: str, attributes: Sized) -> DelphiObject:
-        # Each Delphi server should be connected to only one Diamond server
-        conn = next(iter(self._search._connections.values()))
+        with self._command_lock:
+            # Each Delphi server should be connected to only one Diamond server
+            conn = next(iter(self._search._connections.values()))
 
-        # Send reexecute request
-        request = XDR_reexecute(object_id=object_id, attrs=attributes if len(attributes) > 1 else None)
-        reply = conn.control.reexecute_filters(request)
+            # Send reexecute request
+            request = XDR_reexecute(object_id=object_id, attrs=attributes if len(attributes) > 1 else None)
+            reply = conn.control.reexecute_filters(request)
 
         # Return object attributes
         dct = dict((attr.name, attr.value) for attr in reply.attrs)
@@ -77,7 +79,9 @@ class DiamondRetriever(Retriever):
     def get_stats(self) -> RetrieverStats:
         self._start_event.wait()
 
-        stats = self._search.get_stats()
+        with self._command_lock:
+            stats = self._search.get_stats()
+
         return RetrieverStats(stats['objs_total'], stats['objs_dropped'], stats['objs_false_negative'])
 
     def _create_search(self) -> DiamondSearch:
