@@ -27,7 +27,8 @@ class DiamondRetriever(Retriever):
         self._dataset = dataset
         self._search = self._create_search()
         self._start_event = threading.Event()
-        self._command_lock = threading.Lock()
+        self._command_lock = threading.RLock()
+        self._final_stats = None
 
         try:
             self._diamond_config = DiamondConfig()
@@ -37,11 +38,15 @@ class DiamondRetriever(Retriever):
             self._diamond_config = None
 
     def start(self) -> None:
-        self._search.start()
+        with self._command_lock:
+            self._search.start()
+
         self._start_event.set()
 
     def stop(self) -> None:
-        self._search.close()
+        with self._command_lock:
+            self._final_stats = self.get_stats()
+            self._search.close()
 
     def get_objects(self) -> Iterable[ObjectProvider]:
         for result in self._search.results:
@@ -80,6 +85,9 @@ class DiamondRetriever(Retriever):
         self._start_event.wait()
 
         with self._command_lock:
+            if self._final_stats is not None:
+                return self._final_stats
+
             stats = self._search.get_stats()
 
         return RetrieverStats(stats['objs_total'], stats['objs_dropped'], stats['objs_false_negative'])

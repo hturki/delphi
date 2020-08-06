@@ -34,14 +34,12 @@ class ThresholdSelector(SelectorBase):
                 if result.gt:
                     self._false_negatives += 1
 
-    def new_model(self, model: Optional[Model]) -> None:
+    def new_model_inner(self, model: Optional[Model]) -> None:
         if not self._reexamination_strategy.revisits_old_results:
             return
 
         with self._insert_lock:
-            self._model_present = model is not None
-
-            if self._model_present:
+            if model is not None:
                 self._discard_queue = self._reexamination_strategy.get_new_queues(model, self._discard_queue)
             else:
                 # this is a reset, discard everything

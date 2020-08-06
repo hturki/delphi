@@ -33,11 +33,9 @@ class TopKSelector(SelectorBase):
                     self.result_queue.put(self._priority_queues[-1].get()[-1])
                 self._batch_added = 0
 
-    def new_model(self, model: Optional[Model]) -> None:
+    def new_model_inner(self, model: Optional[Model]) -> None:
         with self._insert_lock:
-            self._model_present = model is not None
-
-            if self._model_present:
+            if model is not None:
                 # add fractional batch before possibly discarding results in old queue
                 for _ in range(math.ceil(float(self._k) * self._batch_added / self._batch_size)):
                     self.result_queue.put(self._priority_queues[-1].get()[1])
