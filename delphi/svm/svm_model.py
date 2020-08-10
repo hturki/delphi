@@ -15,17 +15,14 @@ from delphi.model import Model
 from delphi.object_provider import ObjectProvider
 from delphi.result_provider import ResultProvider
 from delphi.simple_attribute_provider import SimpleAttributeProvider
-from delphi.svm.feature_cache import FeatureCache
 from delphi.svm.feature_provider import FeatureProvider, BATCH_SIZE, get_worker_feature_provider, \
     set_worker_feature_provider
-from delphi.utils import log_exceptions
+from delphi.utils import log_exceptions, bounded_iter
 
 
 # return object_provider, whether to preprocess, vector or (image, key)
 @log_exceptions
 def load_from_path(image_path: Path) -> Tuple[ObjectProvider, bool, Union[List[float], Any]]:
-    get_semaphore().acquire()
-
     split = image_path.parts
     label = split[-2]
     name = split[-1]
@@ -46,8 +43,6 @@ def load_from_path(image_path: Path) -> Tuple[ObjectProvider, bool, Union[List[f
 # return object_provider, whether to preprocess, vector or (image, key)
 @log_exceptions
 def load_from_content(request: ObjectProvider) -> Tuple[ObjectProvider, bool, Union[List[float], Any]]:
-    get_semaphore().acquire()
-
     content = request.content
     key = get_worker_feature_provider().get_result_key_content(content)
     cached_vector = get_worker_feature_provider().get_cached_vector(key)
@@ -73,20 +68,21 @@ class SVMModel(Model):
         return self._version
 
     def infer(self, requests: Iterable[ObjectProvider]) -> Iterable[ResultProvider]:
-        semaphore = mp.Semaphore(256) # Make sure that the load function doesn't overload the consumer
-        with mp.Pool(min(16, mp.cpu_count()), initializer=init_worker,
-                     initargs=(self._feature_provider.feature_extractor,
-                               self._feature_provider.cache, semaphore)) as pool:
-            images = pool.imap_unordered(load_from_content, requests)
+        semaphore = threading.Semaphore(256)  # Make sure that the load function doesn't overload the consumer
+
+        with mp.get_context('spawn').Pool(min(16, mp.cpu_count()), initializer=set_worker_feature_provider,
+                                          initargs=(self._feature_provider.feature_extractor,
+                                                    self._feature_provider.cache)) as pool:
+            images = pool.imap_unordered(load_from_content, bounded_iter(requests, semaphore))
             yield from self._infer_inner(images, semaphore)
 
     def infer_dir(self, directory: Path, callback_fn: Callable[[int, float], None]) -> None:
-        semaphore = mp.Semaphore(256) # Make sure that the load function doesn't overload the consumer
-        with mp.Pool(min(16, mp.cpu_count()), initializer=init_worker,
-                     initargs=(self._feature_provider.feature_extractor,
-                               self._feature_provider.cache, semaphore)) as pool:
-            images = pool.imap_unordered(load_from_path, directory.glob('*/*'))
+        semaphore = threading.Semaphore(256)  # Make sure that the load function doesn't overload the consumer
 
+        with mp.get_context('spawn').Pool(min(16, mp.cpu_count()), initializer=set_worker_feature_provider,
+                                          initargs=(self._feature_provider.feature_extractor,
+                                                    self._feature_provider.cache)) as pool:
+            images = pool.imap_unordered(load_from_path, bounded_iter(directory.glob('*/*'), semaphore))
             results = self._infer_inner(images, semaphore)
 
             i = 0
@@ -105,8 +101,8 @@ class SVMModel(Model):
         return self._probability
 
     def _infer_inner(self, images: Iterable[Tuple[ObjectProvider, bool, Union[List[float], Any]]],
-                     semaphore: mp.Semaphore) -> Iterable[ResultProvider]:
-        feature_queue = queue.Queue()
+                     semaphore: threading.Semaphore) -> Iterable[ResultProvider]:
+        feature_queue = queue.Queue(1000)
 
         @log_exceptions
         def process_uncached():
@@ -187,18 +183,3 @@ class SVMModel(Model):
         results = self._feature_provider.cache_and_get(keys, tensor, True)
         for item in items:
             feature_queue.put((item[0], results[item[2]]))
-
-
-_semaphore: mp.Semaphore
-
-
-def get_semaphore() -> mp.Semaphore:
-    global _semaphore
-    return _semaphore
-
-
-@log_exceptions
-def init_worker(feature_extractor: str, cache: FeatureCache, semaphore: mp.Semaphore):
-    set_worker_feature_provider(feature_extractor, cache)
-    global _semaphore
-    _semaphore = semaphore

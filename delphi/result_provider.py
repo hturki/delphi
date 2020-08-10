@@ -5,7 +5,7 @@ from delphi.attribute_provider import AttributeProvider
 
 class ResultProvider(object):
 
-    def __init__(self, id: str, label: str, score: Optional[float], model_version: Optional[int],
+    def __init__(self, id: str, label: str, score: float, model_version: Optional[int],
                  attributes: AttributeProvider, gt: bool):
         self.id = id
         self.label = label

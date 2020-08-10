@@ -153,8 +153,8 @@ class DataManager(object):
         with self._staging_lock:
             old_dirs = []
             for dir in self._staging_dir.iterdir():
-                for label in dir.iterdir():
-                    if label.name != IGNORE_FILE:
+                if dir.name != IGNORE_FILE:
+                    for label in dir.iterdir():
                         old_dirs.append(label)
 
             for example in examples:

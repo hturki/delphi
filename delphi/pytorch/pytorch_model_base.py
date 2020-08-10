@@ -11,12 +11,10 @@ from torchvision import datasets
 from delphi.model import Model
 from delphi.object_provider import ObjectProvider
 from delphi.result_provider import ResultProvider
-from delphi.utils import log_exceptions
+from delphi.utils import log_exceptions, bounded_iter
 
 
 def preprocess(request: ObjectProvider) -> Tuple[ObjectProvider, torch.Tensor]:
-    get_semaphore().acquire()
-
     return request, get_test_transforms()(request.content)
 
 
@@ -41,9 +39,9 @@ class PytorchModelBase(Model):
         semaphore = mp.Semaphore(256)  # Make sure that the load function doesn't overload the consumer
         batch = []
 
-        with mp.Pool(min(16, mp.cpu_count()), initializer=init_worker,
-                     initargs=(self._test_transforms, semaphore)) as pool:
-            items = pool.imap_unordered(preprocess, requests)
+        with mp.get_context('spawn').Pool(min(16, mp.cpu_count()), initializer=set_test_transforms,
+                                          initargs=(self._test_transforms,)) as pool:
+            items = pool.imap_unordered(preprocess, bounded_iter(requests, semaphore))
 
             for item in items:
                 semaphore.release()
@@ -88,15 +86,7 @@ def get_test_transforms() -> transforms.Compose:
     return _test_transforms
 
 
-def get_semaphore() -> mp.Semaphore:
-    global _semaphore
-    return _semaphore
-
-
 @log_exceptions
-def init_worker(test_transforms: transforms.Compose, semaphore: mp.Semaphore):
+def set_test_transforms(test_transforms: transforms.Compose) -> None:
     global _test_transforms
     _test_transforms = test_transforms
-
-    global _semaphore
-    _semaphore = semaphore

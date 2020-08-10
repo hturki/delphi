@@ -12,7 +12,7 @@ from delphi.mpncov.model_init import get_model
 from delphi.svm.feature_cache import FeatureCache
 from delphi.utils import get_example_key, log_exceptions
 
-BATCH_SIZE = 128
+BATCH_SIZE = 64
 
 
 class Identity(nn.Module):

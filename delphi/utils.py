@@ -1,9 +1,10 @@
 import hashlib
 import multiprocessing as mp
 import sys
+import threading
 from functools import wraps
 from queue import Queue
-from typing import List, Union, Iterable, Any
+from typing import List, Union, Iterable, Any, TypeVar
 
 import grpc
 import numpy as np
@@ -48,6 +49,15 @@ def get_weights(targets: List[int], num_classes=2) -> List[int]:
         weight[idx] = class_weights[val]
 
     return weight
+
+
+T = TypeVar('T')
+
+
+def bounded_iter(iterable: Iterable[T], semaphore: threading.Semaphore) -> Iterable[T]:
+    for item in iterable:
+        semaphore.acquire()
+        yield item
 
 
 def to_iter(queue: Union[Queue, mp.Queue]) -> Iterable[Any]:

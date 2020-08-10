@@ -91,7 +91,7 @@ class Search(DataManagerContext, ModelTrainerContext):
             else:
                 # Pass all examples until user has labeled enough examples to train a model
                 for request in requests:
-                    yield ResultProvider(request.id, '1', None, None, request.attributes, request.gt)
+                    yield ResultProvider(request.id, '1', 0, None, request.attributes, request.gt)
                 return
 
         with self._model_lock:
@@ -278,13 +278,27 @@ class Search(DataManagerContext, ModelTrainerContext):
     def stop(self) -> None:
         self._abort_event.set()
 
+    def _objects_for_model_version(self) -> Iterable[Optional[ObjectProvider]]:
+        with self._model_lock:
+            starting_version = self._model.version if self._model is not None else None
+
+        for retriever_object in self.retriever.get_objects():
+            with self._model_lock:
+                version = self._model.version if self._model is not None else None
+            if version != starting_version:
+                return
+            yield retriever_object
+
+        self._abort_event.set()
+
     @log_exceptions
     def _retriever_thread(self) -> None:
         try:
-            for result in self.infer(self.retriever.get_objects()):
-                self.selector.add_result(result)
-                if self._abort_event.is_set():
-                    return
+            while True:
+                for result in self.infer(self._objects_for_model_version()):
+                    self.selector.add_result(result)
+                    if self._abort_event.is_set():
+                        return
         finally:
             self.retriever.stop()
             self.selector.finish()
