@@ -53,7 +53,6 @@ dependencies:
   - mkl_fft=1.0.15=py37ha843d7b_0
   - mkl_random=1.1.0=py37hd6b4f25_0
   - mmh3=2.5.1=py37he1b5a44_0
-  - more-itertools=8.4.0=py_0
   - multiprocessing-logging=0.2.6=py_0
   - ncurses=6.2=he6710b0_1
   - ninja=1.9.0=py37hfd86e86_0

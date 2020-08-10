@@ -17,8 +17,9 @@ from delphi.mpncov.mpncov_trainer import MPNCovTrainer
 from delphi.object_provider import ObjectProvider
 from delphi.proto.learning_module_pb2 import InferRequest, InferResult, ModelStats, \
     ImportModelRequest, ModelArchive, LabeledExampleRequest, SearchId, \
-    AddLabeledExampleIdsRequest, LabeledExample, DelphiObject, GetObjectsRequest, SearchStats, SearchInfo
-from delphi.proto.learning_module_pb2 import SearchRequest, RetrainPolicyConfig, SVMMode, SVMConfig, Dataset, \
+    AddLabeledExampleIdsRequest, LabeledExample, DelphiObject, GetObjectsRequest, SearchStats, SearchInfo, \
+    CreateSearchRequest
+from delphi.proto.learning_module_pb2 import RetrainPolicyConfig, SVMMode, SVMConfig, Dataset, \
     SelectorConfig, ReexaminationStrategyConfig
 from delphi.proto.learning_module_pb2_grpc import LearningModuleServiceServicer
 from delphi.retrain.absolute_threshold_policy import AbsoluteThresholdPolicy
@@ -54,36 +55,35 @@ class LearningModuleServicer(LearningModuleServiceServicer):
         self._port = port
 
     @log_exceptions_and_abort
-    def StartSearch(self, request: Iterable[SearchRequest], context: grpc.ServicerContext) -> Empty:
-        config = next(request).config
-        retrain_policy = self._get_retrain_policy(config.retrainPolicy)
+    def CreateSearch(self, request: CreateSearchRequest, context: grpc.ServicerContext) -> Empty:
+        retrain_policy = self._get_retrain_policy(request.retrainPolicy)
 
-        nodes = [LearningModuleStub(node) for node in config.nodes]
-        search = Search(config.searchId, config.nodeIndex, nodes, retrain_policy, config.onlyUseBetterModels,
-                        self._root_dir / config.searchId.value, self._port, self._get_retriever(config.dataset),
-                        self._get_selector(config.selector))
+        nodes = [LearningModuleStub(node) for node in request.nodes]
+        search = Search(request.searchId, request.nodeIndex, nodes, retrain_policy, request.onlyUseBetterModels,
+                        self._root_dir / request.searchId.value, self._port, self._get_retriever(request.dataset),
+                        self._get_selector(request.selector), request.hasInitialExamples)
 
         trainers = []
-        for i in range(len(config.trainStrategy)):
-            if config.trainStrategy[i].HasField('examplesPerLabel'):
-                condition_builder = lambda x: ExamplesPerLabelCondition(config.trainStrategy[i].examplesPerLabel.count,
+        for i in range(len(request.trainStrategy)):
+            if request.trainStrategy[i].HasField('examplesPerLabel'):
+                condition_builder = lambda x: ExamplesPerLabelCondition(request.trainStrategy[i].examplesPerLabel.count,
                                                                         x)
-                model = config.trainStrategy[i].examplesPerLabel.model
-            elif config.trainStrategy[i].HasField('testAuc'):
-                condition_builder = lambda x: TestAucCondition(config.trainStrategy[i].testAuc.threshold, x)
-                model = config.trainStrategy[i].testAuc.model
-            elif config.trainStrategy[i].HasField('bandwidth'):
-                bandwidth_config = config.trainStrategy[i].bandwidth
-                condition_builder = lambda x: BandwidthCondition(config.nodeIndex, nodes,
+                model = request.trainStrategy[i].examplesPerLabel.model
+            elif request.trainStrategy[i].HasField('testAuc'):
+                condition_builder = lambda x: TestAucCondition(request.trainStrategy[i].testAuc.threshold, x)
+                model = request.trainStrategy[i].testAuc.model
+            elif request.trainStrategy[i].HasField('bandwidth'):
+                bandwidth_config = request.trainStrategy[i].bandwidth
+                condition_builder = lambda x: BandwidthCondition(request.nodeIndex, nodes,
                                                                  bandwidth_config.thresholdMbps,
                                                                  bandwidth_config.refreshSeconds, x)
-                model = config.trainStrategy[i].bandwidth.model
+                model = request.trainStrategy[i].bandwidth.model
             else:
                 raise NotImplementedError(
-                    'unknown condition: {}'.format(json_format.MessageToJson(config.trainStrategy[i])))
+                    'unknown condition: {}'.format(json_format.MessageToJson(request.trainStrategy[i])))
 
             if model.HasField('svm'):
-                trainer = self._get_svm_trainer(search, config.searchId, i, model.svm)
+                trainer = self._get_svm_trainer(search, request.searchId, i, model.svm)
             elif model.HasField('fastMPNCOV'):
                 trainer = MPNCovTrainer(search, model.fastMPNCOV.distributed, model.fastMPNCOV.freeze.value,
                                         self._model_dir)
@@ -95,11 +95,16 @@ class LearningModuleServicer(LearningModuleServiceServicer):
             trainers.append(condition_builder(trainer))
 
         search.trainers = trainers
-        self._manager.set_search(config.searchId, search, config.metadata)
+        self._manager.set_search(request.searchId, search, request.metadata)
 
-        logger.info('Starting search with id {} and parameters:\n{}'.format(config.searchId.value,
-                                                                            json_format.MessageToJson(config)))
-        search.start(x.example for x in request)
+        logger.info('Create search with id {} and parameters:\n{}'.format(request.searchId.value,
+                                                                          json_format.MessageToJson(request)))
+        return Empty()
+
+    @log_exceptions_and_abort
+    def StartSearch(self, request: SearchId, context: grpc.ServicerContext) -> Empty:
+        logger.info('Starting search with id {}'.format(request.value))
+        self._manager.get_search(request).start()
         return Empty()
 
     @log_exceptions_and_abort

@@ -7,7 +7,8 @@ import "google/protobuf/wrappers.proto";
 package edu.cmu.cs.delphi.api;
 
 service LearningModuleService {
-  rpc StartSearch (stream SearchRequest) returns (google.protobuf.Empty);
+  rpc CreateSearch (CreateSearchRequest) returns (google.protobuf.Empty);
+  rpc StartSearch (SearchId) returns (google.protobuf.Empty);
   rpc StopSearch (SearchId) returns (google.protobuf.Empty);
   rpc GetSearches (google.protobuf.Empty) returns (stream SearchInfo);
 
@@ -122,14 +123,7 @@ message ModelArchive {
   bytes content = 2;
 }
 
-message SearchRequest {
-  oneof value {
-    SearchConfig config = 1;
-    LabeledExample example = 2;
-  }
-}
-
-message SearchConfig {
+message CreateSearchRequest {
   SearchId searchId = 1;
   repeated string nodes = 2;
   int32 nodeIndex = 3;
@@ -138,7 +132,8 @@ message SearchConfig {
   bool onlyUseBetterModels = 6;
   Dataset dataset = 7;
   SelectorConfig selector = 8;
-  string metadata = 9;
+  bool hasInitialExamples = 9;
+  string metadata = 10;
 }
 
 message ModelConditionConfig {

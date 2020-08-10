@@ -13,7 +13,6 @@ import numpy as np
 import tensorboard
 from google.protobuf.any_pb2 import Any
 from logzero import logger
-from more_itertools import peekable
 from sklearn.metrics import classification_report, average_precision_score, precision_recall_curve, confusion_matrix
 from torch.utils.tensorboard import SummaryWriter
 
@@ -40,7 +39,8 @@ class Search(DataManagerContext, ModelTrainerContext):
     trainers: List[ModelCondition]
 
     def __init__(self, id: SearchId, node_index: int, nodes: List[LearningModuleStub], retrain_policy: RetrainPolicy,
-                 only_use_better_models: bool, root_dir: Path, port: int, retriever: Retriever, selector: Selector):
+                 only_use_better_models: bool, root_dir: Path, port: int, retriever: Retriever, selector: Selector,
+                 has_initial_examples: bool):
         self._id = id
         self._node_index = node_index
         self._nodes = nodes
@@ -54,6 +54,10 @@ class Search(DataManagerContext, ModelTrainerContext):
 
         self.retriever = retriever
         self.selector = selector
+
+        # Indicates that the search will seed the strategy with an initial set of examples. The strategy should
+        # therefore hold off on returning inference results until its underlying model is trained
+        self._has_initial_examples = has_initial_examples
 
         self._model: Optional[Model] = None
         self._tb_writer: Optional[SummaryWriter] = None
@@ -72,10 +76,6 @@ class Search(DataManagerContext, ModelTrainerContext):
         self._staged_model_condition = mp.Condition()
 
         self._abort_event = threading.Event()
-
-        # Indicates that the search will seed the strategy with an initial set of examples. The strategy should
-        # therefore hold off on returning inference results until its underlying model is trained
-        self._has_initial_examples = False
 
         if self._node_index == 0:
             threading.Thread(target=self._train_thread, name='train-model').start()
@@ -260,15 +260,9 @@ class Search(DataManagerContext, ModelTrainerContext):
             self._retrain_policy.reset()
             self._model_event.set()
 
-    def start(self, examples: Iterable[LabeledExample]):
+    def start(self) -> None:
         try:
             self.retriever.start()
-            peekable_examples = peekable(examples)
-            if peekable_examples.peek(None) is not None:
-                assert self._node_index == 0
-                self._has_initial_examples = True
-                self._data_manager.add_labeled_examples(peekable_examples)
-                self._initial_model_event.wait()
             threading.Thread(target=self._retriever_thread, name='get-objects').start()
         except Exception as e:
             self.retriever.stop()
@@ -296,6 +290,9 @@ class Search(DataManagerContext, ModelTrainerContext):
     @log_exceptions
     def _retriever_thread(self) -> None:
         try:
+            if self._has_initial_examples:
+                self._initial_model_event.wait()
+
             while True:
                 for result in self.infer(self._objects_for_model_version()):
                     self.selector.add_result(result)
