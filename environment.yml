@@ -107,4 +107,4 @@ dependencies:
     - grpcio-tools==1.29.0
     - lxml==4.5.2
     - mypy-protobuf==1.20
-    - opendiamond==10.1.0
+    - opendiamond==10.1.1

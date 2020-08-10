@@ -277,6 +277,8 @@ class Search(DataManagerContext, ModelTrainerContext):
 
     def stop(self) -> None:
         self._abort_event.set()
+        for trainer in self.trainers:
+            trainer.close()
 
     def _objects_for_model_version(self) -> Iterable[Optional[ObjectProvider]]:
         with self._model_lock:

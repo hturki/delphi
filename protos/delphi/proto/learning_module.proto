@@ -145,6 +145,7 @@ message ModelConditionConfig {
   oneof value {
     ExamplesPerLabelConditionConfig examplesPerLabel = 1;
     TestAucConditionConfig testAuc = 2;
+    BandwidthConditionConfig bandwidth = 3;
   }
 }
 
@@ -156,6 +157,12 @@ message ExamplesPerLabelConditionConfig {
 message TestAucConditionConfig {
   double threshold = 1;
   ModelConfig model = 2;
+}
+
+message BandwidthConditionConfig {
+  double thresholdMbps = 1;
+  int32 refreshSeconds = 2;
+  ModelConfig model = 3;
 }
 
 message ModelConfig {

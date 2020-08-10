@@ -8,6 +8,7 @@ from google.protobuf.wrappers_pb2 import Int64Value
 from logzero import logger
 from opendiamond.server.object_ import ATTR_DATA
 
+from delphi.condition.bandwidth_condition import BandwidthCondition
 from delphi.condition.examples_per_label_condition import ExamplesPerLabelCondition
 from delphi.condition.test_auc_condition import TestAucCondition
 from delphi.context.model_trainer_context import ModelTrainerContext
@@ -57,9 +58,10 @@ class LearningModuleServicer(LearningModuleServiceServicer):
         config = next(request).config
         retrain_policy = self._get_retrain_policy(config.retrainPolicy)
 
-        search = Search(config.searchId, config.nodeIndex, [LearningModuleStub(node) for node in config.nodes],
-                        retrain_policy, config.onlyUseBetterModels, self._root_dir / config.searchId.value, self._port,
-                        self._get_retriever(config.dataset), self._get_selector(config.selector))
+        nodes = [LearningModuleStub(node) for node in config.nodes]
+        search = Search(config.searchId, config.nodeIndex, nodes, retrain_policy, config.onlyUseBetterModels,
+                        self._root_dir / config.searchId.value, self._port, self._get_retriever(config.dataset),
+                        self._get_selector(config.selector))
 
         trainers = []
         for i in range(len(config.trainStrategy)):
@@ -70,6 +72,12 @@ class LearningModuleServicer(LearningModuleServiceServicer):
             elif config.trainStrategy[i].HasField('testAuc'):
                 condition_builder = lambda x: TestAucCondition(config.trainStrategy[i].testAuc.threshold, x)
                 model = config.trainStrategy[i].testAuc.model
+            elif config.trainStrategy[i].HasField('bandwidth'):
+                bandwidth_config = config.trainStrategy[i].bandwidth
+                condition_builder = lambda x: BandwidthCondition(config.nodeIndex, nodes,
+                                                                 bandwidth_config.thresholdMbps,
+                                                                 bandwidth_config.refreshSeconds, x)
+                model = config.trainStrategy[i].bandwidth.model
             else:
                 raise NotImplementedError(
                     'unknown condition: {}'.format(json_format.MessageToJson(config.trainStrategy[i])))

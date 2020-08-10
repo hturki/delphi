@@ -27,6 +27,9 @@ class ExamplesPerLabelCondition(ModelCondition):
 
         return True
 
+    def close(self) -> None:
+        pass
+
     @property
     def trainer(self) -> ModelTrainer:
         return self._trainer

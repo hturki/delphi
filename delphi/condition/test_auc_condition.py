@@ -15,6 +15,9 @@ class TestAucCondition(ModelCondition):
     def is_satisfied(self, example_counts: Dict[str, int], last_statistics: Optional[ModelStats]) -> bool:
         return last_statistics.auc > self._threshold
 
+    def close(self) -> None:
+        pass
+
     @property
     def trainer(self) -> ModelTrainer:
         return self._trainer

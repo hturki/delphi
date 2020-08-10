@@ -17,6 +17,7 @@ service InternalService {
    rpc SubmitTestResults (stream SubmitTestRequest) returns (google.protobuf.Empty);
    rpc PromoteModel (PromoteModelRequest) returns (google.protobuf.Empty);
    rpc DiscardModel (DiscardModelRequest) returns (google.protobuf.Empty);
+   rpc CheckBandwidth (google.protobuf.BytesValue) returns (google.protobuf.BytesValue);
    rpc MessageInternal (InternalMessage) returns (google.protobuf.Any);
 }
 

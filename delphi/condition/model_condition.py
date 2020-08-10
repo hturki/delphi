@@ -11,6 +11,10 @@ class ModelCondition(metaclass=ABCMeta):
     def is_satisfied(self, example_counts: Dict[str, int], last_statistics: Optional[ModelStats]) -> bool:
         pass
 
+    @abstractmethod
+    def close(self) -> None:
+        pass
+
     @property
     @abstractmethod
     def trainer(self) -> ModelTrainer:

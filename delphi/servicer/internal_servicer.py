@@ -1,3 +1,4 @@
+import os
 from typing import Iterable
 
 import grpc
@@ -59,6 +60,10 @@ class InternalServicer(InternalServiceServicer):
     def DiscardModel(self, request: DiscardModelRequest, context: grpc.ServicerContext) -> Empty:
         self._manager.get_search(request.searchId).promote_model(request.version)
         return Empty()
+
+    @log_exceptions_and_abort
+    def CheckBandwidth(self, request: BytesValue, context: grpc.ServicerContext) -> BytesValue:
+        return BytesValue(value=bytearray(os.urandom(1024 * 1024)))
 
     @log_exceptions_and_abort
     def MessageInternal(self, request: InternalMessage, context: grpc.ServicerContext) -> Any:
