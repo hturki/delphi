@@ -38,6 +38,7 @@ class DiamondRetriever(Retriever):
             self._diamond_config = None
 
     def start(self) -> None:
+        logger.info
         with self._command_lock:
             self._search.start()
 
@@ -93,8 +94,12 @@ class DiamondRetriever(Retriever):
         return RetrieverStats(stats['objs_total'], stats['objs_dropped'], stats['objs_false_negative'])
 
     def _create_search(self) -> DiamondSearch:
-        return DiamondSearch([ScopeCookie.parse(x) for x in self._dataset.cookies],
-                             [FilterSpec(x.name, Blob(x.code), x.arguments, Blob(x.blob), x.dependencies,
-                                         x.minScore, x.maxScore) for x in self._dataset.filters],
-                             False,
-                             list(self._dataset.attributes) + [ATTR_DATA])
+        search = DiamondSearch([ScopeCookie.parse(x) for x in self._dataset.cookies], [
+            FilterSpec(x.name, Blob(x.code), x.arguments, Blob(x.blob), x.dependencies, x.minScore, x.maxScore) for x in
+            self._dataset.filters], False, list(self._dataset.attributes) + [ATTR_DATA])
+
+        for host in search._cookie_map:
+            if host not in self._dataset.hosts:
+                del search._cookie_map[host]
+
+        return search

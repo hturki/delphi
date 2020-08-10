@@ -217,8 +217,9 @@ message Dataset {
 
 message DiamondDataset {
   repeated Filter filters = 1;
-  repeated string cookies = 2;
-  repeated string attributes = 3;
+  repeated string hosts = 2;
+  repeated string cookies = 3;
+  repeated string attributes = 4;
 }
 
 message Filter {

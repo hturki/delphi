@@ -20,6 +20,7 @@ from delphi.proto.svm_trainer_pb2 import SetTrainResult, SVMTrainerMessage, SetP
 from delphi.svm.feature_cache import FeatureCache
 from delphi.svm.svm_model import SVMModel
 from delphi.svm.svm_trainer_base import SVMTrainerBase
+from delphi.utils import log_exceptions
 
 
 class DistributedSVMTrainer(SVMTrainerBase):
@@ -39,8 +40,10 @@ class DistributedSVMTrainer(SVMTrainerBase):
         self._train_id = None
         self._train_results = {}
 
+        self._param_grid_event = threading.Event()
+
         if self.context.node_index == 0:
-            self._assign_param_grid()
+            threading.Thread(target=self._assign_param_grid).start()
 
     @property
     def data_requirement(self) -> DataRequirement:
@@ -51,6 +54,7 @@ class DistributedSVMTrainer(SVMTrainerBase):
         return TrainingStyle.DISTRIBUTED
 
     def train_model(self, train_dir: Path) -> Model:
+        self._param_grid_event.wait()
         version = self.get_new_version()
 
         with self._param_grid_lock:
@@ -76,8 +80,7 @@ class DistributedSVMTrainer(SVMTrainerBase):
             message.Pack(SVMTrainerMessage(setTrainResult=SetTrainResult(version=version,
                                                                          params=json.dumps(best_model[1]),
                                                                          score=best_model[2],
-                                                                         model=pickle.dumps(
-                                                                             best_model[0]))))
+                                                                         model=pickle.dumps(best_model[0]))))
             self.context.nodes[0].internal.MessageInternal(
                 InternalMessage(searchId=self._search_id, trainerIndex=self._trainer_index, message=message))
             return SVMModel(best_model[0], version, self.feature_provider, self.probability)
@@ -119,12 +122,15 @@ class DistributedSVMTrainer(SVMTrainerBase):
         self._set_param_grid_inner(json.loads(request.grid))
 
         logger.info('Param grid set from master node')
+        self._param_grid_event.set()
+
         return Any()
 
     def _set_param_grid_inner(self, param_grid: List[Dict[str, Any]]) -> None:
         with self._param_grid_lock:
             self._param_grid = param_grid
 
+    @log_exceptions
     def _assign_param_grid(self) -> None:
         assert self.context.node_index == 0
 
@@ -162,3 +168,5 @@ class DistributedSVMTrainer(SVMTrainerBase):
                     time.sleep(5)
 
             logger.info('Set param grid on node {}'.format(self.context.nodes[i].url))
+
+        self._param_grid_event.set()
