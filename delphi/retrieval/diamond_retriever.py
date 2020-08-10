@@ -5,7 +5,7 @@ from typing import Iterable, Sized
 
 from logzero import logger
 from opendiamond.attributes import StringAttributeCodec
-from opendiamond.client.search import DiamondSearch, FilterSpec, Blob
+from opendiamond.client.search import DiamondSearch, FilterSpec, Blob, _DiamondBlastSet
 from opendiamond.config import DiamondConfig
 from opendiamond.protocol import XDR_reexecute
 from opendiamond.scope import ScopeCookie
@@ -98,8 +98,11 @@ class DiamondRetriever(Retriever):
             FilterSpec(x.name, Blob(x.code), x.arguments, Blob(x.blob), x.dependencies, x.minScore, x.maxScore) for x in
             self._dataset.filters], False, list(self._dataset.attributes) + [ATTR_DATA])
 
-        for host in search._cookie_map:
+        for host in dict(search._cookie_map):
             if host not in self._dataset.hosts:
                 del search._cookie_map[host]
+                del search._connections[host]
+
+        search._blast = _DiamondBlastSet(list(search._connections.values()))
 
         return search
