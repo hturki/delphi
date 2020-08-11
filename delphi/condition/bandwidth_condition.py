@@ -28,7 +28,7 @@ class BandwidthCondition(ModelCondition):
         self._abort_event = threading.Event()
 
         if self._node_index != 0:
-            threading.Thread(target=self._check_bandwidth).start()
+            threading.Thread(target=self._check_bandwidth, name='check-bandwidth').start()
 
     def is_satisfied(self, example_counts: Dict[str, int], last_statistics: Optional[ModelStats]) -> bool:
         if len(self._nodes) == 1:

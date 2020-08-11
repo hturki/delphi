@@ -97,6 +97,8 @@ class SVMTrainerBase(ModelTrainerBase):
         with mp.get_context('spawn').Pool(min(16, mp.cpu_count()), initializer=set_worker_feature_provider,
                                           initargs=(self.feature_provider.feature_extractor,
                                                     self.feature_provider.cache)) as pool:
+            logger.info('%d examples in %s', len(list(example_dir.glob('*/*'))), example_dir)
+
             images = pool.imap_unordered(load_from_path, bounded_iter(example_dir.glob('*/*'), semaphore))
             feature_queue = queue.Queue()
 
@@ -125,7 +127,7 @@ class SVMTrainerBase(ModelTrainerBase):
                 logger.info('{} cached examples, {} new examples preprocessed'.format(cached, uncached))
                 feature_queue.put(None)
 
-            threading.Thread(target=process_uncached, name='process-uncached').start()
+            threading.Thread(target=process_uncached, name='process-uncached-trainer').start()
 
             i = 0
             features = defaultdict(list)

@@ -16,7 +16,7 @@ from delphi.utils import get_example_key, to_iter
 TMP_DIR = 'test-0'
 
 IGNORE_FILE = 'ignore'
-TEST_RATIO = 0.2  # Hold out 20% of labeled examples as test
+TRAIN_TO_TEST_RATIO = 4  # Hold out 20% of labeled examples as test
 
 
 class DataManager(object):
@@ -44,40 +44,34 @@ class DataManager(object):
         threading.Thread(target=self._promote_staging_examples, name='promote-staging-examples').start()
 
     def add_labeled_examples(self, examples: Iterable[LabeledExample]) -> None:
+        if self._context.node_index == 0:
+            self._store_labeled_examples(examples, None)
+            return
+
+        example_queue = queue.Queue()
+
         data_requirement = self._get_data_requirement()
-
         if data_requirement is DataRequirement.MASTER_ONLY:
-            if self._context.node_index == 0:
-                self._store_labeled_examples(examples, None)
-            else:
-                example_queue = queue.Queue()
-                future = self._context.nodes[0].api.AddLabeledExamples.future(to_iter(example_queue))
-                example_queue.put(LabeledExampleRequest(searchId=self._context.search_id))
-                for example in examples:
-                    example_queue.put(LabeledExampleRequest(example=example))
-
-                example_queue.put(None)
-                future.result()
+            future = self._context.nodes[0].api.AddLabeledExamples.future(to_iter(example_queue))
+            example_queue.put(LabeledExampleRequest(searchId=self._context.search_id))
+            for example in examples:
+                example_queue.put(LabeledExampleRequest(example=example))
         else:
-            if self._context.node_index != 0:
-                example_queue = queue.Queue()
-                future = self._context.nodes[0].api.AddLabeledExamples.future(to_iter(example_queue))
-                example_queue.put(LabeledExampleRequest(searchId=self._context.search_id))
+            future = self._context.nodes[0].api.AddLabeledExamples.future(to_iter(example_queue))
+            example_queue.put(LabeledExampleRequest(searchId=self._context.search_id))
 
-                if data_requirement is DataRequirement.DISTRIBUTED_FULL:
-                    self._store_labeled_examples(examples,
-                                                 lambda x: example_queue.put(LabeledExampleRequest(example=x)))
-                else:
-                    def add_example(example: LabeledExample) -> None:
-                        if example.exampleSet.value is ExampleSet.TEST or example.label == '1':
-                            example_queue.put(LabeledExampleRequest(example=example))
-
-                    self._store_labeled_examples(examples, add_example)
-
-                example_queue.put(None)
-                future.result()
+            if data_requirement is DataRequirement.DISTRIBUTED_FULL:
+                self._store_labeled_examples(examples, lambda x: example_queue.put(LabeledExampleRequest(example=x)))
             else:
-                self._store_labeled_examples(examples, None)
+                # We're using distributed_positives - only share positives and test set
+                def add_example(example: LabeledExample) -> None:
+                    if example.exampleSet.value is ExampleSet.TEST or example.label == '1':
+                        example_queue.put(LabeledExampleRequest(example=example))
+
+                self._store_labeled_examples(examples, add_example)
+
+        example_queue.put(None)
+        future.result()
 
     @contextmanager
     def get_examples(self, example_set: ExampleSet) -> Iterable[Path]:
@@ -100,7 +94,7 @@ class DataManager(object):
 
                     yield self._tmp_dir
 
-                    for label in example_dir.iterdir():
+                    for label in self._tmp_dir.iterdir():
                         for tmp_file in label.iterdir():
                             tmp_file.rename(example_dir / label.name / tmp_file.name)
                 else:
@@ -193,7 +187,7 @@ class DataManager(object):
                     and label.name != '1':
                 continue
 
-            to_delete[label] = set(x.name for x in label.iterdir())
+            to_delete[label.name] = set(x.name for x in label.iterdir())
 
         for example in self._context.nodes[0].internal.GetExamples(
                 GetExamplesRequest(searchId=self._context.search_id, exampleSet=example_set,
@@ -212,7 +206,7 @@ class DataManager(object):
 
         for label in to_delete:
             for file in to_delete[label]:
-                example_path = label / file
+                example_path = example_dir / label / file
                 example_path.unlink()
 
     def _promote_staging_examples(self):
@@ -235,8 +229,9 @@ class DataManager(object):
                                 with file.open() as ignore_file:
                                     for line in ignore_file:
                                         for example_set in set_dirs:
-                                            if self._remove_old_paths(line, set_dirs[example_set]):
-                                                self._example_counts[example_set] -= 1
+                                            old_path = self._remove_old_paths(line, set_dirs[example_set])
+                                            if old_path is not None:
+                                                self._increment_example_count(example_set, old_path.parent.name, -1)
                             else:
                                 dir_positives, dir_negatives = self._promote_staging_examples_dir(file, set_dirs)
                                 new_positives += dir_positives
@@ -262,16 +257,19 @@ class DataManager(object):
 
             for example_file in example_files:
                 for example_set in set_dirs:
-                    if self._remove_old_paths(example_file.name, set_dirs[example_set]):
-                        self._example_counts[example_set] -= 1
+                    old_path = self._remove_old_paths(example_file.name, set_dirs[example_set])
+                    if old_path is not None:
+                        self._increment_example_count(example_set, old_path.parent.name, -1)
 
-                if subdir.name == 'test' or (subdir.name == 'unspecified' and self._example_counts[ExampleSet.TEST] <
-                                             self._example_counts[ExampleSet.TRAIN] * TEST_RATIO):
+                if subdir.name == 'test' or (subdir.name == 'unspecified'
+                                             and self._get_example_count(ExampleSet.TEST,
+                                                                         label.name) * TRAIN_TO_TEST_RATIO <
+                                             self._get_example_count(ExampleSet.TRAIN, label.name)):
                     example_set = ExampleSet.TEST
                 else:
                     example_set = ExampleSet.TRAIN
 
-                self._example_counts[example_set] += 1
+                self._increment_example_count(example_set, label.name, 1)
                 example_dir = self._examples_dir / self._to_dir(example_set) / label.name
                 example_dir.mkdir(parents=True, exist_ok=True)
                 example_path = example_dir / example_file.name
@@ -283,16 +281,22 @@ class DataManager(object):
     def _get_data_requirement(self) -> DataRequirement:
         return max([x.data_requirement for x in self._context.get_active_trainers()], key=lambda y: y.value)
 
+    def _get_example_count(self, example_set: ExampleSet, label: str) -> int:
+        return self._example_counts['{}_{}'.format(ExampleSet.Name(example_set), label)]
+
+    def _increment_example_count(self, example_set: ExampleSet, label: str, delta: int) -> None:
+        self._example_counts['{}_{}'.format(ExampleSet.Name(example_set), label)] += delta
+
     @staticmethod
-    def _remove_old_paths(example_file: str, old_dirs: List[Path]) -> bool:
+    def _remove_old_paths(example_file: str, old_dirs: List[Path]) -> Optional[Path]:
         for old_path in old_dirs:
             old_example_path = old_path / example_file
             if old_example_path.exists():
                 old_example_path.unlink()
                 logger.info('Removed old path {} for example'.format(old_example_path))
-                return True
+                return old_example_path
 
-        return False
+        return None
 
     @staticmethod
     def _to_dir(example_set: ExampleSet):

@@ -25,7 +25,7 @@ from delphi.model import Model
 from delphi.model_trainer import ModelTrainer, TrainingStyle
 from delphi.object_provider import ObjectProvider
 from delphi.proto.internal_pb2 import ExampleMetadata, TestResult, StageModelRequest, TrainModelRequest, \
-    DiscardModelRequest, PromoteModelRequest, SubmitTestRequest, ValidateTestResultsRequest
+    DiscardModelRequest, PromoteModelRequest, SubmitTestRequest, ValidateTestResultsRequest, SubmitTestVersion
 from delphi.proto.learning_module_pb2 import ModelStats, ModelMetrics, ModelArchive, SearchId, LabeledExample, \
     ExampleSet
 from delphi.result_provider import ResultProvider
@@ -114,7 +114,7 @@ class Search(DataManagerContext, ModelTrainerContext):
             return self._nodes[0].api.GetModelStats(self._id)
 
         with self._model_lock:
-            return self._model_stats
+            return self._model_stats if self._model_stats is not None else ModelStats(version=self._model.version)
 
     def import_model(self, model_version: int, file: bytes) -> None:
         assert self._node_index == 0
@@ -158,20 +158,16 @@ class Search(DataManagerContext, ModelTrainerContext):
         threading.Thread(target=self._validate_test_results_thread, args=(model_version,),
                          name='validate-test_results').start()
 
-    def submit_test_results(self, results: Iterable[TestResult]) -> None:
+    def submit_test_results(self, results: Iterable[TestResult], model_version: int) -> None:
         assert self._node_index == 0
-        model_results = defaultdict(list)
-        for result in results:
-            model_results[result.version].append((int(result.label), result.score))
+        model_results = [(int(result.label), result.score) for result in results]
 
-        for model_version in model_results:
-            results = model_results[model_version]
-            with self._results_condition:
-                self._test_results[model_version].append(results)
-                remaining = len(self._nodes) - len(self._test_results[model_version])
-                logger.info('Received {} validation results ({} nodes remaining)'.format(len(results), remaining))
-                if remaining == 0:
-                    self._results_condition.notify_all()
+        with self._results_condition:
+            self._test_results[model_version].append(model_results)
+            remaining = len(self._nodes) - len(self._test_results[model_version])
+            logger.info('Received {} validation results ({} nodes remaining)'.format(len(model_results), remaining))
+            if remaining == 0:
+                self._results_condition.notify_all()
 
     def promote_model(self, model_version: int):
         model = self._get_staging_model(model_version)
@@ -307,6 +303,7 @@ class Search(DataManagerContext, ModelTrainerContext):
         while True:
             try:
                 self._model_event.wait()
+                time.sleep(5)  # Wait a bit to see if examples come from other nodes and avoid retraining multiple times
                 self._model_event.clear()
                 self._train_model()
 
@@ -380,12 +377,15 @@ class Search(DataManagerContext, ModelTrainerContext):
         model_stats = None
         targets = []
         preds = []
+        labels = set()
         for node_results in test_results:
             for result in node_results:
                 targets.append(result[0])
                 preds.append(result[1])
+                labels.add(results[0])
 
-        if len(targets) > 0:
+        # Only create model stats if we have sufficient test set data
+        if len(labels) > 0:
             model_stats = self.create_model_stats(model.version, targets, preds, model.scores_are_probabilities)
 
         with self._model_lock:
@@ -442,10 +442,10 @@ class Search(DataManagerContext, ModelTrainerContext):
         result_queue = queue.Queue()
 
         future = self.nodes[0].internal.SubmitTestResults.future(to_iter(result_queue))
-        result_queue.put(SubmitTestRequest(searchId=self._id))
+        result_queue.put(SubmitTestRequest(version=SubmitTestVersion(searchId=self._id, version=model_version)))
 
         def store_result(target: int, pred: float):
-            result_queue.put(SubmitTestRequest(result=TestResult(version=model_version, label=str(target), score=pred)))
+            result_queue.put(SubmitTestRequest(result=TestResult(label=str(target), score=pred)))
 
         eval_start = time.time()
         with self._data_manager.get_examples(ExampleSet.TEST) as test_dir:

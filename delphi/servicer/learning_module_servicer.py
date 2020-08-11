@@ -1,3 +1,5 @@
+import queue
+import threading
 from pathlib import Path
 from typing import Iterable
 
@@ -41,7 +43,7 @@ from delphi.svm.ensemble_svm_trainer import EnsembleSVMTrainer
 from delphi.svm.feature_cache import FeatureCache
 from delphi.svm.svm_trainer import SVMTrainer
 from delphi.svm.svm_trainer_base import SVMTrainerBase
-from delphi.utils import log_exceptions_and_abort
+from delphi.utils import log_exceptions_and_abort, to_iter
 from delphi.wsdan.wsdan_trainer import WSDANTrainer
 
 
@@ -156,12 +158,27 @@ class LearningModuleServicer(LearningModuleServiceServicer):
     @log_exceptions_and_abort
     def AddLabeledExampleIds(self, request: AddLabeledExampleIdsRequest, context: grpc.ServicerContext) -> Empty:
         search = self._manager.get_search(request.searchId)
-        examples = []
-        for object_id in request.examples:
-            example = search.retriever.get_object(object_id, [ATTR_DATA])
-            examples.append(LabeledExample(label=request.examples[object_id], content=example.content))
 
-        search.add_labeled_examples(examples)
+        examples = queue.Queue()
+        exceptions = []
+
+        def get_examples():
+            try:
+                for object_id in request.examples:
+                    example = search.retriever.get_object(object_id, [ATTR_DATA])
+                    examples.put(LabeledExample(label=request.examples[object_id], content=example.content))
+            except Exception as e:
+                exceptions.append(e)
+            finally:
+                examples.put(None)
+
+        threading.Thread(target=get_examples, name='get-examples').start()
+
+        search.add_labeled_examples(to_iter(examples))
+
+        if len(exceptions) > 0:
+            raise exceptions[0]
+
         return Empty()
 
     @log_exceptions_and_abort

@@ -1,5 +1,5 @@
 import os
-from typing import Iterable
+from typing import Iterable, Iterator
 
 import grpc
 from google.protobuf.any_pb2 import Any
@@ -46,9 +46,9 @@ class InternalServicer(InternalServiceServicer):
         return Empty()
 
     @log_exceptions_and_abort
-    def SubmitTestResults(self, request: Iterable[SubmitTestRequest], context: grpc.ServicerContext) -> Empty:
-        search_id = next(request).searchId
-        self._manager.get_search(search_id).submit_test_results(x.result for x in request)
+    def SubmitTestResults(self, request: Iterator[SubmitTestRequest], context: grpc.ServicerContext) -> Empty:
+        version = next(request).version
+        self._manager.get_search(version.searchId).submit_test_results((x.result for x in request), version.version)
         return Empty()
 
     @log_exceptions_and_abort

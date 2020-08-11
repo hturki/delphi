@@ -43,7 +43,7 @@ class DistributedSVMTrainer(SVMTrainerBase):
         self._param_grid_event = threading.Event()
 
         if self.context.node_index == 0:
-            threading.Thread(target=self._assign_param_grid).start()
+            threading.Thread(target=self._assign_param_grid, name='set-param-grid').start()
 
     @property
     def data_requirement(self) -> DataRequirement:

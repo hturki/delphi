@@ -90,6 +90,6 @@ def log_exceptions_and_abort(func):
             return func(*args, **kwargs)
         except Exception as e:
             logger.exception(e)
-            args[-1].abort(grpc.StatusCode.INTERNAL, str(sys.exc_info()))
+            args[-1].abort(grpc.StatusCode.INTERNAL, str(sys.exc_info()[0]))
 
     return func_wrapper

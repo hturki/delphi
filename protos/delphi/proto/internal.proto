@@ -58,15 +58,19 @@ message ValidateTestResultsRequest {
 
 message SubmitTestRequest {
   oneof value {
-    SearchId searchId = 1;
+    SubmitTestVersion version = 1;
     TestResult result = 2;
   }
 }
 
+message SubmitTestVersion {
+  SearchId searchId = 1;
+  int32 version = 2;
+}
+
 message TestResult {
-  int32 version = 1;
-  string label = 2;
-  double score = 3;
+  string label = 1;
+  double score = 2;
 }
 
 message PromoteModelRequest {

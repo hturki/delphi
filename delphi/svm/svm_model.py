@@ -130,7 +130,7 @@ class SVMModel(Model):
             logger.info('{} cached examples, {} new examples preprocessed'.format(cached, uncached))
             feature_queue.put(None)
 
-        threading.Thread(target=process_uncached, name='process-uncached').start()
+        threading.Thread(target=process_uncached, name='process-uncached-model').start()
 
         scored = 0
         queue_finished = False
