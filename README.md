@@ -10,7 +10,13 @@ python setup.py install
 learning_module
 ```
 
-The virtual env's Python interpreter path is "baked in" in the entry points. So one can also run directly without `conda activate`:
-```bash
-/path_to_virtual_env/bin/learning_module
-```
+Delphi currently relies on [OpenDiamond](http://diamond.cs.cmu.edu/) to provide examples and static filtering and on [Hyperfind](https://github.com/cmusatyalab/hyperfind) for visualization. The installation steps for these dependencies can be found in their respective repositories.
+
+## Configuration
+
+The server reads from $HOME/.delphi/config.yml at startup by default. The main configuration points are:
+
+- feature_cache: Feature cache configuration (Redis, Filesystem, or Noop)
+- root_dir: Data directory where search-relevant data such as training examples are stored
+- model_dir: Directory containing pretrained models (normally <repo>/models)
+- port: Port the server listens on
