@@ -24,7 +24,7 @@ class ThresholdSelector(SelectorBase):
 
     def add_result_inner(self, result: ResultProvider) -> None:
         if result.score > self._threshold:
-            self.result_queue.put(self._discard_queue[-1].get()[-1])
+            self.result_queue.put(result)
         elif self._reexamination_strategy.revisits_old_results:
             with self._insert_lock:
                 self._discard_queue[-1].put((-result.score, result.id, result))

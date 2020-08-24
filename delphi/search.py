@@ -274,10 +274,14 @@ class Search(DataManagerContext, ModelTrainerContext):
         with self._model_lock:
             starting_version = self._model.version if self._model is not None else None
 
+        logger.info('Starting evaluation with model version {}'.format(starting_version))
+
         for retriever_object in self.retriever.get_objects():
             with self._model_lock:
                 version = self._model.version if self._model is not None else None
             if version != starting_version:
+                logger.info('Done evaluating with model version {} (new version {} available)'.format(starting_version,
+                                                                                                      version))
                 return
             yield retriever_object
 
@@ -485,7 +489,8 @@ class Search(DataManagerContext, ModelTrainerContext):
         logger.error('Failed to start Tensorboard')
 
     @staticmethod
-    def create_model_stats(version: int, target: List[int], pred: List[float], is_probability: bool) -> ModelStats:
+    def create_model_stats(version: int, target: List[int], pred: List[float], is_probability: bool) \
+            -> Optional[ModelStats]:
         assert len(target) == len(pred)
         pred = np.array(pred)
         target = np.array(target)
@@ -501,14 +506,23 @@ class Search(DataManagerContext, ModelTrainerContext):
 
         logger.info(
             'Test classification report (ideal threshold):\n{}'.format(classification_report(target, pred_best_f1)))
-        _, fp_best_f1, fn_best_f1, tp_best_f1 = confusion_matrix(target, pred_best_f1).ravel()
         stats_best_f1 = classification_report(target, pred_best_f1, output_dict=True)
+
+        # Only predictions for a single class - can't build a confusion matrix
+        if '0' not in stats_best_f1 or '1' not in stats_best_f1:
+            return None
+
+        _, fp_best_f1, fn_best_f1, tp_best_f1 = confusion_matrix(target, pred_best_f1).ravel()
 
         pred = np.where(pred >= 0.5, 1, 0) if is_probability else np.where(pred > 0, 1, 0)
         logger.info(
             'Test classification report (0.5 threshold):\n{}'.format(classification_report(target, pred)))
-        _, fp, fn, tp = confusion_matrix(target, pred).ravel()
         stats = classification_report(target, pred, output_dict=True)
+
+        if '0' not in stats or '1' not in stats:
+            return None
+
+        _, fp, fn, tp = confusion_matrix(target, pred).ravel()
 
         return ModelStats(
             testExamples=len(pred),

@@ -10,6 +10,7 @@ class TopReexaminationStrategy(ReexaminationStrategy):
     def __init__(self, k: int):
         self._k = k
 
+    @property
     def revisits_old_results(self) -> bool:
         return True
 

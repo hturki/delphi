@@ -38,7 +38,7 @@ class TopKSelector(SelectorBase):
             if model is not None:
                 # add fractional batch before possibly discarding results in old queue
                 for _ in range(math.ceil(float(self._k) * self._batch_added / self._batch_size)):
-                    self.result_queue.put(self._priority_queues[-1].get()[1])
+                    self.result_queue.put(self._priority_queues[-1].get()[-1])
                 self._priority_queues = self._reexamination_strategy.get_new_queues(model, self._priority_queues)
             else:
                 # this is a reset, discard everything

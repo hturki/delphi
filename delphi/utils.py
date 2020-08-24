@@ -1,12 +1,10 @@
 import hashlib
 import multiprocessing as mp
-import sys
 import threading
 from functools import wraps
 from queue import Queue
 from typing import List, Union, Iterable, Any, TypeVar
 
-import grpc
 import numpy as np
 from logzero import logger
 
@@ -82,14 +80,3 @@ def log_exceptions(func):
 
     return func_wrapper
 
-
-def log_exceptions_and_abort(func):
-    @wraps(func)
-    def func_wrapper(*args, **kwargs):
-        try:
-            return func(*args, **kwargs)
-        except Exception as e:
-            logger.exception(e)
-            args[-1].abort(grpc.StatusCode.INTERNAL, str(sys.exc_info()[0]))
-
-    return func_wrapper

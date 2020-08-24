@@ -82,7 +82,8 @@ class WSDANTrainer(PytorchTrainerBase):
         model_pred = copy.deepcopy(self._model)
         model_pred.eval()
 
-        return WSDANModel(model_pred, model_version, self._get_image_writer(), self._curr_epoch, checkpoint['optimizer'],
+        return WSDANModel(model_pred, model_version, self._get_image_writer(), self._curr_epoch,
+                          checkpoint['optimizer'],
                           checkpoint['feature_center'])
 
     def train_model(self, train_dir: Path) -> Model:
@@ -175,9 +176,8 @@ class WSDANTrainer(PytorchTrainerBase):
             self._scheduler.step()
 
         end_time = time.time()
-        logger.info(
-            'Trained model for {} epochs in {:.3f} seconds'.format(self._curr_epoch - start_epoch,
-                                                                   end_time - start_time))
+        logger.info('Trained model for {} epochs in {:.3f} seconds'.format(self._curr_epoch - start_epoch,
+                                                                           end_time - start_time))
 
         model_pred = copy.deepcopy(self._model)
         model_pred.eval()

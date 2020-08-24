@@ -7,6 +7,7 @@ from delphi.selection.reexamination_strategy import ReexaminationStrategy
 
 class FullReexaminationStrategy(ReexaminationStrategy):
 
+    @property
     def revisits_old_results(self) -> bool:
         return True
 

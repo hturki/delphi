@@ -88,7 +88,6 @@ class WSDAN(nn.Module):
             self.features = getattr(resnet, net)(pretrained=pretrained).get_features()
             self.num_features = 512 * self.features[-1][-1].expansion
         else:
-            logger.info('wtf')
             raise ValueError('Unsupported net: %s' % net)
 
         # Attention Maps

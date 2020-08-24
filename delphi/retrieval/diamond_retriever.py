@@ -38,7 +38,6 @@ class DiamondRetriever(Retriever):
             self._diamond_config = None
 
     def start(self) -> None:
-        logger.info
         with self._command_lock:
             self._search.start()
 
