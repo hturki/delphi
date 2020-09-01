@@ -80,7 +80,7 @@ class InternalServicer(InternalServiceServicer):
 
     def DiscardModel(self, request: DiscardModelRequest, context: grpc.ServicerContext) -> Empty:
         try:
-            self._manager.get_search(request.searchId).promote_model(request.version)
+            self._manager.get_search(request.searchId).discard_model(request.version)
             return Empty()
         except Exception as e:
             logger.exception(e)
