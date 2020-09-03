@@ -106,6 +106,7 @@ class SVMTrainerBase(ModelTrainerBase):
                 uncached = 0
                 batch = []
                 for label, should_process, payload in images:
+                    semaphore.release()
                     if should_process:
                         image, key = payload
                         batch.append((label,
